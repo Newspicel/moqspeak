@@ -6,7 +6,7 @@ use crate::ui::IntoAny;
 use zgui::reactive::UnsyncCallback;
 use zgui_ui::prelude::*;
 
-use crate::model::{ChannelId, ClientId, ClientMsg};
+use crate::model::{ChannelId, ClientId, ClientMsg, Role as Perm};
 use crate::ui::avatar::UserAvatarProps;
 use crate::ui::icons::{self, IcoProps};
 use crate::ui::state::{AppState, Drag, Modal, Row, Selection, tree_rows};
@@ -80,8 +80,8 @@ fn TreeRow(row: Row) -> impl IntoView {
             view! { ChannelRow(id = id, name = name, depth = depth, full = full, is_default = is_default, count = count, has_children = has_children, collapsed = collapsed) }
                 .into_any()
         }
-        Row::Client { id, name, depth, muted, deaf, away, me, sharing } => view! {
-            ClientRow(id = id, name = name, depth = depth, muted = muted, deaf = deaf, away = away, me = me, sharing = sharing)
+        Row::Client { id, name, depth, muted, deaf, away, me, sharing, role } => view! {
+            ClientRow(id = id, name = name, depth = depth, muted = muted, deaf = deaf, away = away, me = me, sharing = sharing, role = role)
         }
         .into_any(),
     }
@@ -106,8 +106,10 @@ fn ServerRow(name: String) -> impl IntoView {
                 }
             }
             ContextMenuContent {
-                MenuItem(on_select = act(move || state.modal.set(Modal::CreateChannel { parent: None }))) {"Create Channel…"}
-                MenuSeparator()
+                if move || state.my_role() >= Perm::Mod {
+                    MenuItem(on_select = act(move || state.modal.set(Modal::CreateChannel { parent: None }))) {"Create Channel…"}
+                    MenuSeparator()
+                }
                 MenuItem(on_select = act(move || state.disconnect())) {"Disconnect"}
             }
         }
@@ -182,13 +184,17 @@ fn ChannelRow(
             ContextMenuContent {
                 MenuItem(on_select = act(move || state.join(id))) {"Switch to Channel"}
                 MenuItem(on_select = act(move || state.toggle_collapsed(id))) {{if collapsed { "Expand" } else { "Collapse" }}}
-                MenuSeparator()
-                MenuItem(on_select = act(move || state.modal.set(Modal::CreateChannel { parent: Some(id) }))) {"Create Sub-Channel…"}
-                MenuItem(
-                    destructive = true,
-                    disabled = is_default,
-                    on_select = act(move || state.msg(ClientMsg::DeleteChannel { id }))
-                ) {"Delete Channel"}
+                if move || state.my_role() >= Perm::Mod {
+                    MenuSeparator()
+                    MenuItem(on_select = act(move || state.modal.set(Modal::CreateChannel { parent: Some(id) }))) {"Create Sub-Channel…"}
+                }
+                if move || state.my_role() >= Perm::Admin {
+                    MenuItem(
+                        destructive = true,
+                        disabled = is_default,
+                        on_select = act(move || state.msg(ClientMsg::DeleteChannel { id }))
+                    ) {"Delete Channel"}
+                }
             }
         }
     }
@@ -204,6 +210,7 @@ fn ClientRow(
     away: bool,
     me: bool,
     sharing: bool,
+    role: Perm,
 ) -> impl IntoView {
     let state = AppState::expect();
     let talking = move || state.talking.with(|t| t.contains(&id));
@@ -236,9 +243,11 @@ fn ClientRow(
         view! {
             ContextMenuContent {
                 MenuItem(on_select = act(move || state.open_private(id))) {"Send Text Message"}
-                MenuItem(on_select = act(move || {
-                    if let Some(mine) = state.my_client() { state.move_client(id, mine.channel) }
-                })) {"Move to My Channel"}
+                if move || state.my_role() >= Perm::Mod {
+                    MenuItem(on_select = act(move || {
+                        if let Some(mine) = state.my_client() { state.move_client(id, mine.channel) }
+                    })) {"Move to My Channel"}
+                }
                 MenuItem(on_select = act({
                     let name = poke_name.clone();
                     move || state.modal.set(Modal::Poke { to: id, name: name.clone() })
@@ -247,11 +256,20 @@ fn ClientRow(
                 MenuItem(on_select = act(move || state.set_local_mute(id, !locally_muted()))) {
                     {move || if locally_muted() { "Unmute Locally" } else { "Mute Locally" }}
                 }
-                MenuSeparator()
-                MenuItem(
-                    destructive = true,
-                    on_select = act(move || state.msg(ClientMsg::Kick { id, reason: String::new() }))
-                ) {"Kick from Channel"}
+                if move || state.my_role() >= Perm::Admin {
+                    MenuSeparator()
+                    MenuLabel {"Role"}
+                    MenuItem(disabled = role == Perm::Admin, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Perm::Admin }))) {"Make Admin"}
+                    MenuItem(disabled = role == Perm::Mod, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Perm::Mod }))) {"Make Moderator"}
+                    MenuItem(disabled = role == Perm::User, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Perm::User }))) {"Make User"}
+                }
+                if move || state.my_role() >= Perm::Mod {
+                    MenuSeparator()
+                    MenuItem(
+                        destructive = true,
+                        on_select = act(move || state.msg(ClientMsg::Kick { id, reason: String::new() }))
+                    ) {"Kick from Channel"}
+                }
             }
         }
         .into_any()
@@ -271,7 +289,8 @@ fn ClientRow(
                     style:padding-left = indent(depth),
                     on:click = move |_| if state.click(Selection::Client(id)) && !me { state.open_private(id) },
                     on:pointer_down = move |ev| {
-                        if ev.button == Some(PointerButton::Primary) {
+                        // Anyone can drag themselves; moving others takes a moderator.
+                        if ev.button == Some(PointerButton::Primary) && (me || state.my_role_untracked() >= Perm::Mod) {
                             state.drag.set(Some(Drag {
                                 client: id,
                                 name: drag_name.clone(),
@@ -291,6 +310,12 @@ fn ClientRow(
                     }
                     if move || sharing {
                         Badge(variant = BadgeVariant::Destructive, class = "node-badge") {"LIVE"}
+                    }
+                    if move || role == Perm::Admin {
+                        Badge(variant = BadgeVariant::Default, class = "node-badge") {"Admin"}
+                    }
+                    if move || role == Perm::Mod {
+                        Badge(variant = BadgeVariant::Outline, class = "node-badge") {"Mod"}
                     }
                     spacer()
                     if move || muted {

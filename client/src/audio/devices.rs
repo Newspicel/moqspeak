@@ -226,6 +226,7 @@ fn open_output(
                     .clamp(16.0, FRAME as f64) as usize;
                 codec.resize(want, 0.0);
                 mixer.mix(&mut codec);
+                mixer.record_played(&codec, volume);
                 converted.clear();
                 resampler.process(&codec, &mut converted);
                 pending.extend(converted.iter());

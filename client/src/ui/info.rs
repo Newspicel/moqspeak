@@ -199,10 +199,15 @@ fn ClientInfo(id: ClientId) -> impl IntoView {
                     }
                 }
                 CardAction {
-                    {move || {
-                        let (label, variant) = status();
-                        view! { Badge(variant = variant) {{label}} }
-                    }}
+                    row(class = "card-actions") {
+                        if move || c.get().is_some_and(|c| c.role != crate::model::Role::User) {
+                            Badge(variant = BadgeVariant::Outline) {{move || c.get().map(|c| c.role.label()).unwrap_or_default()}}
+                        }
+                        {move || {
+                            let (label, variant) = status();
+                            view! { Badge(variant = variant) {{label}} }
+                        }}
+                    }
                 }
             }
         }

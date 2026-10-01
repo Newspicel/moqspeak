@@ -13,6 +13,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio_tungstenite::tungstenite::Message;
 
 use crate::audio::{Audio, Packet};
+use crate::identity::Identity;
 use crate::media::MediaSession;
 use crate::model::{Channel, ChatTarget, Client, ClientId, ClientMsg, ServerInfo, ServerMsg};
 use crate::screen::{Sharer, VideoFrame};
@@ -165,13 +166,14 @@ impl Engine {
     ) -> (Self, UnboundedReceiver<Event>) {
         let (packet_tx, packet_rx) = unbounded_channel();
         let audio = Arc::new(Audio::start(packet_tx, input, output));
-        Self::start_with(audio, packet_rx)
+        Self::start_with(audio, packet_rx, Identity::load_or_create())
     }
 
     /// Starts the runtime around audio the caller already set up.
     pub fn start_with(
         audio: Arc<Audio>,
         packet_rx: UnboundedReceiver<Packet>,
+        identity: Identity,
     ) -> (Self, UnboundedReceiver<Event>) {
         let (cmd_tx, cmd_rx) = unbounded_channel();
         let (event_tx, event_rx) = unbounded_channel();
@@ -190,7 +192,7 @@ impl Engine {
                     .enable_all()
                     .build()
                     .expect("tokio runtime");
-                runtime.block_on(run(worker_audio, cmd_rx, event_tx, packet_rx));
+                runtime.block_on(run(worker_audio, cmd_rx, event_tx, packet_rx, identity));
             })
             .expect("spawn network thread");
         (
@@ -208,6 +210,7 @@ async fn run(
     mut commands: UnboundedReceiver<Command>,
     events: UnboundedSender<Event>,
     mut packets: UnboundedReceiver<Packet>,
+    identity: Identity,
 ) {
     const MAX_RETRIES: u32 = 6;
     let mut pending: Option<Command> = None;
@@ -227,6 +230,7 @@ async fn run(
                 let started = std::time::Instant::now();
                 let outcome = session(
                     &audio,
+                    &identity,
                     &address,
                     &nickname,
                     &mut commands,
@@ -302,21 +306,10 @@ fn platform() -> String {
     }
 }
 
-fn user_uid() -> String {
-    let user = std::env::var("USER")
-        .or_else(|_| std::env::var("USERNAME"))
-        .unwrap_or_default();
-    let host = std::env::var("HOSTNAME").unwrap_or_default();
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    for b in format!("{user}@{host}").bytes() {
-        h = (h ^ b as u64).wrapping_mul(0x100_0000_01b3);
-    }
-    format!("{h:016x}")
-}
-
 /// One connection to one server. Returns a command that ended it and should run next, if any.
 async fn session(
     audio: &Arc<Audio>,
+    identity: &Identity,
     address: &str,
     nickname: &str,
     commands: &mut UnboundedReceiver<Command>,
@@ -342,7 +335,7 @@ async fn session(
 
     let hello = ClientMsg::Hello {
         name: nickname.to_owned(),
-        uid: user_uid(),
+        uid: identity.uid(),
         platform: platform(),
         version: env!("CARGO_PKG_VERSION").to_owned(),
         channel: None,
@@ -378,6 +371,10 @@ async fn session(
                     Err(e) => { tracing::warn!("bad server message: {e}: {text}"); continue; }
                 };
                 match msg {
+                    ServerMsg::Challenge { nonce, server } => {
+                        let auth = ClientMsg::Auth { sig: identity.answer(&server, &nonce) };
+                        ws_tx.send(Message::text(serde_json::to_string(&auth)?)).await?;
+                    }
                     ServerMsg::Welcome { you, relay, token } => {
                         let _ = events.send(Event::Status(ConnStatus::Connected));
                         let _ = events.send(Event::Welcome { you: you.clone() });

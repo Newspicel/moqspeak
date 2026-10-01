@@ -41,6 +41,8 @@ pub struct Client {
     #[serde(default)]
     pub sharing: bool,
     #[serde(default)]
+    pub role: Role,
+    #[serde(default)]
     pub connected_at: u64,
     #[serde(default)]
     pub platform: String,
@@ -59,6 +61,28 @@ pub struct ServerInfo {
     pub relay: String,
 }
 
+/// What a client may do on a server.
+#[derive(
+    Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize,
+)]
+#[serde(rename_all = "lowercase")]
+pub enum Role {
+    #[default]
+    User,
+    Mod,
+    Admin,
+}
+
+impl Role {
+    pub fn label(self) -> &'static str {
+        match self {
+            Role::User => "User",
+            Role::Mod => "Mod",
+            Role::Admin => "Admin",
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChatTarget {
@@ -74,6 +98,10 @@ pub enum ChatTarget {
     reason = "the protocol carries fields this client does not show yet"
 )]
 pub enum ServerMsg {
+    Challenge {
+        nonce: String,
+        server: String,
+    },
     Welcome {
         you: Client,
         relay: String,
@@ -177,6 +205,13 @@ pub enum ClientMsg {
     },
     Sharing {
         sharing: bool,
+    },
+    Auth {
+        sig: String,
+    },
+    SetRole {
+        id: ClientId,
+        role: Role,
     },
 }
 

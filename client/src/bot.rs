@@ -61,7 +61,8 @@ pub fn run(args: &[String]) {
         }
     });
 
-    let (engine, mut events) = Engine::start_with(audio, packet_rx);
+    let (engine, mut events) =
+        Engine::start_with(audio, packet_rx, crate::identity::Identity::ephemeral());
     engine.send(Command::Connect { address, nickname });
     let mut joined = false;
     let mut names = std::collections::HashMap::new();

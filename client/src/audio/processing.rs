@@ -1,8 +1,59 @@
-//! Cleaning and classifying the microphone: RNNoise suppression and the earshot speech detector.
+//! Cleaning and classifying the microphone: WebRTC AEC3 echo cancellation (sonora), RNNoise
+//! suppression and the earshot speech detector.
 
 use nnnoiseless::DenoiseState;
 
-use super::FRAME;
+use sonora::config::{EchoCanceller as Aec3, HighPassFilter};
+use sonora::{AudioProcessing, Config, StreamConfig};
+
+use super::{FRAME, RATE};
+
+/// Samples in the 10 ms frames sonora works on.
+const TEN_MS: usize = RATE as usize / 100;
+
+/// Removes what the speakers played from the microphone signal.
+pub struct EchoCanceller {
+    apm: AudioProcessing,
+    scratch: Vec<f32>,
+}
+
+impl EchoCanceller {
+    pub fn new() -> Self {
+        let config = Config {
+            echo_canceller: Some(Aec3::default()),
+            high_pass_filter: Some(HighPassFilter::default()),
+            ..Default::default()
+        };
+        let mut apm = AudioProcessing::builder()
+            .config(config)
+            .capture_config(StreamConfig::new(RATE, 1))
+            .render_config(StreamConfig::new(RATE, 1))
+            .build();
+        // A first guess for device latency; AEC3 refines its own estimate.
+        let _ = apm.set_stream_delay_ms(50);
+        Self {
+            apm,
+            scratch: vec![0.0; TEN_MS],
+        }
+    }
+
+    /// Feeds the far end (`played`, consumed in whole 10 ms frames) and cleans `frame` in place.
+    pub fn process(&mut self, frame: &mut [f32], played: &mut Vec<f32>) {
+        let whole = played.len() / TEN_MS * TEN_MS;
+        for chunk in played[..whole].chunks_exact(TEN_MS) {
+            let _ = self
+                .apm
+                .process_render_f32(&[chunk], &mut [&mut self.scratch[..]]);
+        }
+        played.drain(..whole);
+        for chunk in frame.chunks_exact_mut(TEN_MS) {
+            self.scratch.copy_from_slice(chunk);
+            let _ = self
+                .apm
+                .process_capture_f32(&[&self.scratch[..]], &mut [chunk]);
+        }
+    }
+}
 
 /// The speech probability above which a frame counts as voice.
 pub const SPEECH: f32 = 0.5;
@@ -73,6 +124,40 @@ impl SpeechDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn echo_canceller_removes_a_delayed_copy_of_the_far_end() {
+        let mut aec = EchoCanceller::new();
+        let mut seed = 0x1234_5678u32;
+        let mut noise = move || {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            (seed as f32 / u32::MAX as f32 - 0.5) * 0.4
+        };
+        let delay = RATE as usize / 50; // 20 ms between the speaker and the microphone
+        let mut history = vec![0.0f32; delay];
+        let (mut before, mut after) = (0.0f32, 0.0f32);
+        for i in 0..250 {
+            // 5 s of 20 ms frames
+            let far: Vec<f32> = (0..FRAME).map(|_| noise()).collect();
+            history.extend_from_slice(&far);
+            let mut mic: Vec<f32> = history[..FRAME].iter().map(|s| s * 0.5).collect();
+            history.drain(..FRAME);
+            let mut played = far.clone();
+            let energy_in: f32 = mic.iter().map(|s| s * s).sum();
+            aec.process(&mut mic, &mut played);
+            if i >= 200 {
+                before += energy_in;
+                after += mic.iter().map(|s| s * s).sum::<f32>();
+            }
+        }
+        let reduction_db = 10.0 * (before / after.max(1e-12)).log10();
+        assert!(
+            reduction_db > 10.0,
+            "only {reduction_db:.1} dB of echo removed"
+        );
+    }
 
     #[test]
     fn silence_is_not_speech() {

@@ -32,6 +32,10 @@ rav1e = { version = "0.8", default-features = false, features = ["threading", "a
 rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8"] }
 nnnoiseless = { version = "0.5", default-features = false }
 earshot = "1"
+sonora = "0.2"
+ed25519-dalek = "2"
+base64 = "0.22"
+getrandom = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.build-dependencies]

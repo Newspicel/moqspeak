@@ -9,12 +9,20 @@ import { DurableObject } from "cloudflare:workers";
 
 export interface Env {
   SERVERS: DurableObjectNamespace<VoiceServer>;
+  VAULT: DurableObjectNamespace<TokenVault>;
   MOQ_RELAY: string;
+  /// A long-lived relay token, used when rotation is not configured or fails.
   MOQ_TOKEN?: string;
+  /// A Cloudflare API token that may create and delete MoQ relay tokens. Enables rotation.
+  CF_API_TOKEN?: string;
+  CF_ACCOUNT_ID?: string;
   MOQ_RELAY_ID?: string;
 }
 
-const PROTOCOL = 1;
+const PROTOCOL = 2;
+
+type Role = "user" | "mod" | "admin";
+const RANK: Record<Role, number> = { user: 0, mod: 1, admin: 2 };
 
 interface Channel {
   id: number;
@@ -42,10 +50,24 @@ interface Client {
   connected_at: number;
   platform: string;
   version: string;
+  role: Role;
+}
+
+/// A socket that said hello and has not answered the challenge yet.
+interface Pending {
+  pending: true;
+  nonce: string;
+  name: string;
+  uid: string;
+  platform: string;
+  version: string;
+  channel?: number;
 }
 
 type Incoming =
   | { t: "hello"; name: string; uid: string; platform?: string; version?: string; channel?: number; protocol?: number }
+  | { t: "auth"; sig: string }
+  | { t: "set_role"; id: number; role: Role }
   | { t: "join"; channel: number; password?: string }
   | { t: "status"; muted?: boolean; deaf?: boolean; away?: boolean; away_message?: string }
   | { t: "rename"; name: string }
@@ -68,6 +90,8 @@ function clean(s: unknown, max: number): string {
 
 export class VoiceServer extends DurableObject<Env> {
   channels: Map<number, Channel> = new Map();
+  /// Roles above "user", by identity.
+  roles: Map<string, Role> = new Map();
   serverName = "";
   welcome = "";
   createdAt = 0;
@@ -80,6 +104,8 @@ export class VoiceServer extends DurableObject<Env> {
   }
 
   async load() {
+    const roles = (await this.ctx.storage.get<Record<string, Role>>("roles")) ?? {};
+    this.roles = new Map(Object.entries(roles));
     const stored = await this.ctx.storage.get<Channel[]>("channels");
     this.serverName = (await this.ctx.storage.get<string>("name")) ?? "";
     this.welcome = (await this.ctx.storage.get<string>("welcome")) ?? "";
@@ -208,6 +234,22 @@ export class VoiceServer extends DurableObject<Env> {
     return id;
   }
 
+  /// The role of an identity. The first identity on a server with no admin becomes its admin.
+  async roleFor(uid: string): Promise<Role> {
+    if (![...this.roles.values()].includes("admin")) {
+      this.roles.set(uid, "admin");
+      await this.ctx.storage.put("roles", Object.fromEntries(this.roles));
+    }
+    return this.roles.get(uid) ?? "user";
+  }
+
+  /// Whether `me` holds at least `needed`; tells the client when not.
+  allowed(ws: WebSocket, me: Client, needed: Role): boolean {
+    if (RANK[me.role ?? "user"] >= RANK[needed]) return true;
+    this.send(ws, { t: "error", message: `you need to be ${needed === "admin" ? "an admin" : "a moderator"} to do that` });
+    return false;
+  }
+
   channelName(id: number) {
     return this.channels.get(id)?.name ?? "?";
   }
@@ -244,14 +286,43 @@ export class VoiceServer extends DurableObject<Env> {
     }
     const me = ws.deserializeAttachment() as Client | null;
 
+    const attached = ws.deserializeAttachment() as Client | Pending | null;
+
     if (msg.t === "hello") {
-      if (me) return;
+      if (me && (me as Client).id) return;
+      const uid = clean(msg.uid, 64);
+      if (!/^[A-Za-z0-9_-]{43}$/.test(uid)) return this.send(ws, { t: "error", message: "this client is too old; please update moqspeak" });
+      const nonce = b64url(crypto.getRandomValues(new Uint8Array(32)));
+      const pending: Pending = {
+        pending: true,
+        nonce,
+        name: clean(msg.name, MAX_NAME) || "Unknown",
+        uid,
+        platform: clean(msg.platform, 32),
+        version: clean(msg.version, 32),
+        channel: typeof msg.channel === "number" ? msg.channel : undefined,
+      };
+      ws.serializeAttachment(pending);
+      this.send(ws, { t: "challenge", nonce, server: this.serverName });
+      return;
+    }
+
+    if (msg.t === "auth") {
+      const p = attached as Pending | null;
+      if (!p || !p.pending) return this.send(ws, { t: "error", message: "say hello first" });
+      const ok = await verifyIdentity(p.uid, `moqspeak-auth:${this.serverName}:${p.nonce}`, msg.sig);
+      if (!ok) {
+        this.send(ws, { t: "error", message: "identity check failed" });
+        ws.close(4001, "identity check failed");
+        return;
+      }
+      const role = await this.roleFor(p.uid);
       const id = await this.nextId();
-      const name = this.uniqueName(clean(msg.name, MAX_NAME) || "Unknown");
-      const wanted = typeof msg.channel === "number" && this.channels.has(msg.channel) ? msg.channel : this.defaultChannel();
+      const name = this.uniqueName(p.name);
+      const wanted = p.channel !== undefined && this.channels.has(p.channel) ? p.channel : this.defaultChannel();
       const client: Client = {
         id,
-        uid: clean(msg.uid, 64),
+        uid: p.uid,
         name,
         channel: wanted,
         muted: false,
@@ -261,17 +332,18 @@ export class VoiceServer extends DurableObject<Env> {
         broadcast: `moqspeak/${this.serverName}/${id}-${crypto.randomUUID().slice(0, 8)}`,
         sharing: false,
         connected_at: Date.now(),
-        platform: clean(msg.platform, 32),
-        version: clean(msg.version, 32),
+        platform: p.platform,
+        version: p.version,
+        role,
       };
       ws.serializeAttachment(client);
+      const token = await this.env.VAULT.get(this.env.VAULT.idFromName("relay-tokens")).token();
       this.send(ws, {
         t: "welcome",
         protocol: PROTOCOL,
         you: client,
         relay: this.env.MOQ_RELAY,
-        relay_id: this.env.MOQ_RELAY_ID ?? "",
-        token: this.env.MOQ_TOKEN ?? null,
+        token,
       });
       this.broadcast(
         { t: "event", kind: "connected", client: id, name, channel: wanted, text: `"${name}" connected to channel "${this.channelName(wanted)}"` },
@@ -281,7 +353,7 @@ export class VoiceServer extends DurableObject<Env> {
       return;
     }
 
-    if (!me) return this.send(ws, { t: "error", message: "say hello first" });
+    if (!me || !(me as Client).id) return this.send(ws, { t: "error", message: "say hello first" });
 
     const update = (patch: Partial<Client>) => {
       const next = { ...me, ...patch };
@@ -351,6 +423,7 @@ export class VoiceServer extends DurableObject<Env> {
         return;
       }
       case "create_channel": {
+        if (!this.allowed(ws, me, "mod")) return;
         const name = clean(msg.name, 40);
         if (!name) return this.send(ws, { t: "error", message: "channel needs a name" });
         const parent = typeof msg.parent === "number" && this.channels.has(msg.parent) ? msg.parent : null;
@@ -375,6 +448,7 @@ export class VoiceServer extends DurableObject<Env> {
         return;
       }
       case "edit_channel": {
+        if (!this.allowed(ws, me, "mod")) return;
         const ch = this.channels.get(msg.id);
         if (!ch) return;
         if (typeof msg.name === "string" && clean(msg.name, 40)) ch.name = clean(msg.name, 40);
@@ -386,6 +460,7 @@ export class VoiceServer extends DurableObject<Env> {
         return;
       }
       case "delete_channel": {
+        if (!this.allowed(ws, me, "admin")) return;
         const ch = this.channels.get(msg.id);
         if (!ch) return;
         if (ch.is_default) return this.send(ws, { t: "error", message: "the default channel cannot be deleted" });
@@ -408,6 +483,24 @@ export class VoiceServer extends DurableObject<Env> {
         this.pushState();
         return;
       }
+      case "set_role": {
+        if (!this.allowed(ws, me, "admin")) return;
+        const role: Role = msg.role === "admin" || msg.role === "mod" ? msg.role : "user";
+        const peer = this.find(msg.id);
+        if (!peer) return;
+        const admins = [...this.roles.entries()].filter(([, r]) => r === "admin").length;
+        if (peer.client.role === "admin" && role !== "admin" && admins <= 1)
+          return this.send(ws, { t: "error", message: "a server needs at least one admin" });
+        if (role === "user") this.roles.delete(peer.client.uid);
+        else this.roles.set(peer.client.uid, role);
+        await this.ctx.storage.put("roles", Object.fromEntries(this.roles));
+        for (const { ws: sock, client } of this.sockets())
+          if (client.uid === peer.client.uid) sock.serializeAttachment({ ...client, role });
+        const title = { user: "a user", mod: "a moderator", admin: "an admin" }[role];
+        this.broadcast({ t: "event", kind: "role", text: `"${peer.client.name}" is now ${title} (by "${me.name}")` });
+        this.pushState();
+        return;
+      }
       case "sharing": {
         const sharing = msg.sharing === true;
         if (sharing === me.sharing) return;
@@ -422,6 +515,7 @@ export class VoiceServer extends DurableObject<Env> {
         return;
       }
       case "move": {
+        if (msg.id !== me.id && !this.allowed(ws, me, "mod")) return;
         const peer = this.find(msg.id);
         const target = this.channels.get(msg.channel);
         if (!peer || !target || peer.client.channel === target.id) return;
@@ -443,6 +537,7 @@ export class VoiceServer extends DurableObject<Env> {
         return;
       }
       case "kick": {
+        if (!this.allowed(ws, me, "mod")) return;
         const peer = this.find(msg.id);
         if (!peer) return;
         const fallback = this.defaultChannel();
@@ -476,6 +571,113 @@ export class VoiceServer extends DurableObject<Env> {
     this.broadcast({ t: "event", kind: "disconnected", client: me.id, text: `"${me.name}" disconnected` });
     this.pushState();
   }
+}
+
+/// base64url without padding.
+function b64url(bytes: Uint8Array): string {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function fromB64url(text: string): Uint8Array {
+  const b64 = text.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((text.length + 3) % 4);
+  return Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+}
+
+/// Checks that `sig` is the Ed25519 signature of `message` by the public key `uid`.
+async function verifyIdentity(uid: string, message: string, sig: unknown): Promise<boolean> {
+  if (typeof sig !== "string") return false;
+  try {
+    const key = await crypto.subtle.importKey("raw", fromB64url(uid), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, key, fromB64url(sig), new TextEncoder().encode(message));
+  } catch {
+    return false;
+  }
+}
+
+interface RelayToken {
+  secret: string;
+  jti: string;
+  expires: string;
+}
+
+const ROTATING_LABEL = "moqspeak-rotating";
+const TOKEN_LIFETIME = 24 * 3600 * 1000;
+const RENEW_BEFORE = 6 * 3600 * 1000;
+
+/// Hands out relay tokens. With CF_API_TOKEN set it mints a fresh 24-hour token whenever the
+/// current one has less than six hours left, and deletes expired ones; otherwise it hands out
+/// the static MOQ_TOKEN. One instance serves every server, because a relay holds ten tokens.
+export class TokenVault extends DurableObject<Env> {
+  api(path: string, init?: RequestInit) {
+    const base = `https://api.cloudflare.com/client/v4/accounts/${this.env.CF_ACCOUNT_ID}/moq/relays/${this.env.MOQ_RELAY_ID}/tokens`;
+    return fetch(base + path, {
+      ...init,
+      headers: { authorization: `Bearer ${this.env.CF_API_TOKEN}`, "content-type": "application/json" },
+    });
+  }
+
+  async token(): Promise<string | null> {
+    const fallback = this.env.MOQ_TOKEN ?? null;
+    if (!this.env.CF_API_TOKEN || !this.env.CF_ACCOUNT_ID || !this.env.MOQ_RELAY_ID) return fallback;
+    let current = await this.ctx.storage.get<RelayToken>("current");
+    if (!current || Date.parse(current.expires) - Date.now() < RENEW_BEFORE) {
+      try {
+        current = await this.mint();
+        await this.ctx.storage.put("current", current);
+        if ((await this.ctx.storage.getAlarm()) === null) await this.ctx.storage.setAlarm(Date.now() + 3600 * 1000);
+      } catch (e) {
+        console.error(`relay token rotation failed: ${e}`);
+        return current?.secret ?? fallback;
+      }
+    }
+    return current.secret;
+  }
+
+  async mint(): Promise<RelayToken> {
+    const expires = new Date(Date.now() + TOKEN_LIFETIME).toISOString().replace(/\.\d{3}Z$/, "Z");
+    const res = await this.api("", {
+      method: "POST",
+      body: JSON.stringify({ label: ROTATING_LABEL, operations: ["publish", "subscribe"], expires }),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${(await res.text()).slice(0, 300)}`);
+    const found = findToken(await res.json());
+    if (!found) throw new Error("the API answered without a token secret");
+    return found;
+  }
+
+  /// Deletes this vault's expired tokens, so the relay never runs out of its ten.
+  async alarm() {
+    try {
+      const res = await this.api("");
+      if (res.ok) {
+        for (const t of allTokens(await res.json())) {
+          if (t.label === ROTATING_LABEL && Date.parse(t.expires) < Date.now()) {
+            await this.api(`/${t.jti}`, { method: "DELETE" });
+          }
+        }
+      }
+    } finally {
+      await this.ctx.storage.setAlarm(Date.now() + 6 * 3600 * 1000);
+    }
+  }
+}
+
+/// Every `{jti, expires, label}` object anywhere in an API answer.
+function allTokens(value: unknown, out: Array<{ jti: string; expires: string; label?: string; secret?: string }> = []) {
+  if (Array.isArray(value)) value.forEach((v) => allTokens(v, out));
+  else if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    if (typeof o.jti === "string" && typeof o.expires === "string") out.push(o as never);
+    Object.values(o).forEach((v) => allTokens(v, out));
+  }
+  return out;
+}
+
+function findToken(answer: unknown): RelayToken | null {
+  const t = allTokens(answer).find((t) => typeof t.secret === "string");
+  return t ? { secret: t.secret!, jti: t.jti, expires: t.expires } : null;
 }
 
 export default {

@@ -79,6 +79,7 @@ pub struct Settings {
     pub theme_mode: String,
     pub noise_suppression: bool,
     pub smart_vad: bool,
+    pub echo_cancellation: bool,
 }
 
 pub const DEFAULT_ADDRESS: &str = "moqspeak.newspicel.workers.dev/public";
@@ -105,6 +106,7 @@ impl Default for Settings {
             theme_mode: "system".into(),
             noise_suppression: true,
             smart_vad: true,
+            echo_cancellation: true,
         }
     }
 }
@@ -250,6 +252,9 @@ impl AppState {
             .noise_suppression
             .store(settings.noise_suppression, Ordering::Relaxed);
         audio.smart_vad.store(settings.smart_vad, Ordering::Relaxed);
+        audio
+            .echo_cancellation
+            .store(settings.echo_cancellation, Ordering::Relaxed);
         Self {
             engine: StoredValue::new(engine),
             status: RwSignal::new(ConnStatus::Disconnected),
@@ -305,6 +310,18 @@ impl AppState {
         let me = self.me.get()?;
         self.clients
             .with(|c| c.iter().find(|c| c.id == me).cloned())
+    }
+
+    /// What this client may do on the server it is connected to.
+    pub fn my_role(&self) -> crate::model::Role {
+        self.my_client().map(|c| c.role).unwrap_or_default()
+    }
+
+    pub fn my_role_untracked(&self) -> crate::model::Role {
+        let me = self.me.get_untracked();
+        self.clients
+            .with_untracked(|c| c.iter().find(|c| Some(c.id) == me).map(|c| c.role))
+            .unwrap_or_default()
     }
 
     pub fn client(&self, id: ClientId) -> Option<Client> {
@@ -736,6 +753,7 @@ pub enum Row {
         away: bool,
         me: bool,
         sharing: bool,
+        role: crate::model::Role,
     },
 }
 
@@ -791,6 +809,7 @@ pub fn tree_rows(
                     away: c.away,
                     me: Some(c.id) == cx.me,
                     sharing: c.sharing,
+                    role: c.role,
                 });
             }
             walk(cx, Some(ch.id), depth + 1, rows);
@@ -839,6 +858,7 @@ mod tests {
             away_message: String::new(),
             broadcast: String::new(),
             sharing: false,
+            role: Default::default(),
             connected_at: 0,
             platform: String::new(),
             version: String::new(),

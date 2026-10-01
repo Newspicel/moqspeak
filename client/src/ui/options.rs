@@ -187,6 +187,18 @@ pub fn OptionsBody() -> impl IntoView {
                                 }
                             }
                             Section(title = "Processing") {
+                                Setting(label = "Echo cancellation") {
+                                    row(class = "switch-row") {
+                                        Switch(
+                                            default_checked = settings.echo_cancellation,
+                                            on_change = UnsyncCallback::new(move |on: bool| {
+                                                state.engine.with_value(|e| e.audio.shared.echo_cancellation.store(on, Ordering::Relaxed));
+                                                state.update_settings(|s| s.echo_cancellation = on);
+                                            })
+                                        )
+                                        text(class = "opt-hint") {"Keeps your speakers out of your microphone."}
+                                    }
+                                }
                                 Setting(label = "Noise suppression") {
                                     row(class = "switch-row") {
                                         Switch(

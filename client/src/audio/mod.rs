@@ -82,6 +82,8 @@ pub struct AudioShared {
     pub noise_suppression: AtomicBool,
     /// Whether the neural detector decides what is speech.
     pub smart_vad: AtomicBool,
+    /// Whether AEC3 removes the speakers from the microphone.
+    pub echo_cancellation: AtomicBool,
     /// The detector's latest speech probability.
     pub voice_prob: AtomicF32,
 }
@@ -101,6 +103,7 @@ impl AudioShared {
             transmitting: AtomicBool::new(false),
             noise_suppression: AtomicBool::new(true),
             smart_vad: AtomicBool::new(true),
+            echo_cancellation: AtomicBool::new(true),
             voice_prob: AtomicF32::new(0.0),
         })
     }
@@ -217,6 +220,8 @@ impl Peer {
 #[derive(Default)]
 pub struct Mixer {
     peers: Mutex<HashMap<u64, Peer>>,
+    /// What went to the speakers, at the codec rate, for the echo canceller.
+    played: Mutex<VecDeque<f32>>,
 }
 
 impl Mixer {
@@ -278,6 +283,20 @@ impl Mixer {
                 *s += peer.pull() * gain;
             }
         }
+    }
+
+    /// Records what the speakers played, scaled by the output volume.
+    fn record_played(&self, samples: &[f32], volume: f32) {
+        let mut played = self.played.lock().unwrap();
+        played.extend(samples.iter().map(|s| s * volume));
+        // Keep at most half a second; a canceller that falls this far behind starts over.
+        let excess = played.len().saturating_sub(RATE as usize / 2);
+        played.drain(..excess);
+    }
+
+    /// Takes everything played since the last call.
+    fn take_played(&self, into: &mut Vec<f32>) {
+        into.extend(self.played.lock().unwrap().drain(..));
     }
 }
 
@@ -423,12 +442,20 @@ fn encoder_loop(
     const HANGOVER_FRAMES: u32 = 20; // 400 ms
     let mut smoothed = -100.0f32;
     let mut cleaner = processing::Cleaner::new();
+    let mut echo = processing::EchoCanceller::new();
+    let mut played = Vec::with_capacity(FRAME * 4);
     let mut detector = processing::SpeechDetector::new();
 
     while let Ok(chunk) = frames.recv() {
         buffer.extend_from_slice(&chunk);
         while buffer.len() >= FRAME {
             let mut frame: Vec<f32> = buffer.drain(..FRAME).collect();
+            mixer.take_played(&mut played);
+            if shared.echo_cancellation.load(Ordering::Relaxed) {
+                echo.process(&mut frame, &mut played);
+            } else {
+                played.clear();
+            }
             if shared.noise_suppression.load(Ordering::Relaxed) {
                 cleaner.process(&mut frame);
             }

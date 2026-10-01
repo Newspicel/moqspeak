@@ -6,6 +6,7 @@
 mod audio;
 mod bot;
 mod engine;
+mod identity;
 mod media;
 mod model;
 mod screen;

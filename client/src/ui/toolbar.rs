@@ -73,7 +73,7 @@ pub fn Toolbar() -> impl IntoView {
             .status
             .with(|s| matches!(s, ConnStatus::Disconnected | ConnStatus::Failed(_)))
     });
-    let not_connected = Signal::derive(move || !state.connected());
+    let cannot_create = Signal::derive(move || state.my_role() < crate::model::Role::Mod);
 
     view! {
         row(class = "toolbar", a11y:role = Role::Toolbar) {
@@ -102,7 +102,7 @@ pub fn Toolbar() -> impl IntoView {
             }
             Separator(orientation = SeparatorOrientation::Vertical, class = "tool-sep")
             ButtonGroup(class = "tool-group") {
-                Tool(svg = icons::ADD_CHANNEL, label = "Create channel…", disabled = not_connected,
+                Tool(svg = icons::ADD_CHANNEL, label = "Create channel…", disabled = cannot_create,
                     on_press = std::rc::Rc::new(move || state.modal.set(Modal::CreateChannel { parent: None })))
                 Tool(svg = icons::SETTINGS, label = "Options",
                     on_press = std::rc::Rc::new(move || state.modal.set(Modal::Options)))

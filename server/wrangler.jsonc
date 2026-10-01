@@ -4,11 +4,18 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
   "durable_objects": {
-    "bindings": [{ "name": "SERVERS", "class_name": "VoiceServer" }]
+    "bindings": [
+      { "name": "SERVERS", "class_name": "VoiceServer" },
+      { "name": "VAULT", "class_name": "TokenVault" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["VoiceServer"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["VoiceServer"] },
+    { "tag": "v2", "new_sqlite_classes": ["TokenVault"] }
+  ],
   "vars": {
     "MOQ_RELAY": "https://draft-16.cloudflare.mediaoverquic.com",
-    "MOQ_RELAY_ID": "615ec116435c0bb9c0747dbdea2b495c"
+    "MOQ_RELAY_ID": "615ec116435c0bb9c0747dbdea2b495c",
+    "CF_ACCOUNT_ID": "589f5bc663445a0a6f47bdabd36501ce"
   }
 }
