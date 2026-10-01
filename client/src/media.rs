@@ -26,8 +26,8 @@ pub const SCREEN_TRACK: &str = "screen";
 enum Op {
     Publish(Packet),
     Video(VideoFrame),
-    Watch(ClientId, String, std::sync::mpsc::Sender<VideoFrame>),
-    Unwatch(ClientId),
+    Watch(u64, String, std::sync::mpsc::Sender<VideoFrame>),
+    Unwatch(u64),
     Subscribe(ClientId, String),
     Unsubscribe(ClientId),
     Count(usize),
@@ -67,12 +67,12 @@ impl MediaSession {
         let _ = self.ops.send(Op::Video(frame));
     }
 
-    /// Starts receiving `path`'s screen into `sink`.
-    pub fn watch(&self, id: ClientId, path: String, sink: std::sync::mpsc::Sender<VideoFrame>) {
+    /// Starts receiving `path`'s screen into `sink`, as viewer `id`.
+    pub fn watch(&self, id: u64, path: String, sink: std::sync::mpsc::Sender<VideoFrame>) {
         let _ = self.ops.send(Op::Watch(id, path, sink));
     }
 
-    pub fn unwatch(&self, id: ClientId) {
+    pub fn unwatch(&self, id: u64) {
         let _ = self.ops.send(Op::Unwatch(id));
     }
 

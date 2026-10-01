@@ -58,6 +58,8 @@ fn main() -> Result<(), zgui::Error> {
         .with_size(1100.0, 760.0)
         .with_min_size(720.0, 480.0)
         .with_icon(window_icon())
+        // Pop-out screen windows have no life of their own.
+        .with_exit_policy(ExitPolicy::WhenPrimaryCloses)
         .with_stylesheet(ui::SHEET)
         .run(move || {
             let (engine, mut events) = boot.take().expect("one main window");
@@ -69,6 +71,10 @@ fn main() -> Result<(), zgui::Error> {
                     state.apply(event);
                 }
             });
+            // Closing the main window ends the program at once. Settings are saved as they change
+            // and the OS closes the sockets; tearing the tree down piece by piece only gives
+            // late reactive work a chance to touch values that are already gone.
+            std::mem::forget(on_close_request(|| std::process::exit(0)));
             state.info("Welcome to moqspeak. Connect to a server to start talking.");
             // A development aid for screenshots: MOQSPEAK_OPEN=connect|options|about.
             match std::env::var("MOQSPEAK_OPEN").as_deref() {

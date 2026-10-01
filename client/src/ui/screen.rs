@@ -88,14 +88,25 @@ fn play(handle: gpu::SurfaceHandle, frames: Receiver<VideoFrame>) {
         });
 }
 
+/// Numbers screen views so each has its own subscription.
+static NEXT_VIEW: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
 /// A live view of `client`'s shared screen. Subscribes while mounted.
 #[component]
 pub fn ScreenView(state: AppState, client: ClientId, #[prop(into)] class: String) -> impl IntoView {
     let handle = gpu::SurfaceHandle::new(SurfaceConfig::default());
     let (tx, rx) = std::sync::mpsc::channel();
     play(handle.clone(), rx);
-    state.send(Command::Watch { client, sink: tx });
-    on_cleanup_local(move || state.send(Command::Unwatch { client }));
+    // The engine handle is cloned out of the state now: this view can outlive the main window's
+    // reactive scope (a pop-out window is its own root), and its cleanup must not reach into it.
+    let engine = state.engine.get_value();
+    let view = NEXT_VIEW.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    engine.send(Command::Watch {
+        client,
+        view,
+        sink: tx,
+    });
+    on_cleanup_local(move || engine.send(Command::Unwatch { view }));
     view! {
         {zgui::elements::surface().class(class).source(&handle).into_view()}
     }
@@ -104,18 +115,21 @@ pub fn ScreenView(state: AppState, client: ClientId, #[prop(into)] class: String
 /// Opens a window that shows `client`'s screen large.
 pub fn pop_out(state: AppState, client: ClientId, name: String) {
     let windows = use_windows();
-    windows.open(
-        WindowOptions::new(format!("{name}'s screen — moqspeak"))
-            .with_size(1280.0, 800.0)
-            .with_stylesheet(POPOUT_SHEET),
-        move || {
-            view! {
-                column(class = "popout") {
-                    ScreenView(state = state, client = client, class = "popout-frame")
+    let root = state.root.get_value();
+    root.with(|| {
+        windows.open(
+            WindowOptions::new(format!("{name}'s screen — moqspeak"))
+                .with_size(1280.0, 800.0)
+                .with_stylesheet(POPOUT_SHEET),
+            move || {
+                view! {
+                    column(class = "popout") {
+                        ScreenView(state = state, client = client, class = "popout-frame")
+                    }
                 }
-            }
-        },
-    );
+            },
+        )
+    });
 }
 
 const POPOUT_SHEET: &str = css!(

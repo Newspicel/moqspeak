@@ -87,13 +87,15 @@ pub enum Command {
         monitor: u32,
     },
     StopShare,
-    /// Streams `client`'s screen into `sink` until [`Command::Unwatch`].
+    /// Streams `client`'s screen into `sink` until [`Command::Unwatch`] names the same `view`.
+    /// Each viewer has its own `view`, so two views of one screen do not end each other.
     Watch {
         client: ClientId,
+        view: u64,
         sink: std::sync::mpsc::Sender<VideoFrame>,
     },
     Unwatch {
-        client: ClientId,
+        view: u64,
     },
 }
 
@@ -444,15 +446,15 @@ async fn session(
                         let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
                     }
                 }
-                Some(Command::Watch { client, sink }) => {
+                Some(Command::Watch { client, view, sink }) => {
                     let path = last_clients.iter().find(|c| c.id == client).map(|c| c.broadcast.clone());
                     if let (Some(path), Some(session)) = (path, &media) {
-                        session.watch(client, path, sink);
+                        session.watch(view, path, sink);
                     }
                 }
-                Some(Command::Unwatch { client }) => {
+                Some(Command::Unwatch { view }) => {
                     if let Some(session) = &media {
-                        session.unwatch(client);
+                        session.unwatch(view);
                     }
                 }
             },

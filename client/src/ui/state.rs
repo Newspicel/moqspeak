@@ -227,6 +227,9 @@ pub struct AppState {
     pub pointer: RwSignal<(f32, f32)>,
     pub collapsed: RwSignal<BTreeSet<ChannelId>>,
     last_click: StoredValue<Option<(Selection, std::time::Instant)>>,
+    /// The application root's owner. Windows opened from deep inside the tree are opened under
+    /// it, because a window's handle state belongs to the owner `open` runs in (zortax/zgui#5).
+    pub root: StoredValue<zgui::reactive::Owner>,
     pub ptt: RwSignal<bool>,
     pub local_mutes: RwSignal<BTreeSet<ClientId>>,
     pub volumes: RwSignal<HashMap<ClientId, f32>>,
@@ -282,6 +285,10 @@ impl AppState {
             pointer: RwSignal::new((0.0, 0.0)),
             collapsed: RwSignal::new(BTreeSet::new()),
             last_click: StoredValue::new(None),
+            root: StoredValue::new(
+                zgui::reactive::Owner::current()
+                    .expect("AppState is created inside the app's root owner"),
+            ),
             ptt: RwSignal::new(false),
             local_mutes: RwSignal::new(BTreeSet::new()),
             volumes: RwSignal::new(HashMap::new()),
@@ -295,7 +302,8 @@ impl AppState {
     }
 
     pub fn send(&self, command: Command) {
-        self.engine.with_value(|e| e.send(command));
+        // During shutdown the state can be gone before a window's cleanup runs.
+        let _ = self.engine.try_with_value(|e| e.send(command));
     }
 
     pub fn msg(&self, msg: ClientMsg) {
