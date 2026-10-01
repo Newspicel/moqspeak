@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "moqspeak",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "durable_objects": {
+    "bindings": [{ "name": "SERVERS", "class_name": "VoiceServer" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["VoiceServer"] }],
+  "vars": {
+    "MOQ_RELAY": "https://draft-16.cloudflare.mediaoverquic.com",
+    "MOQ_RELAY_ID": "615ec116435c0bb9c0747dbdea2b495c"
+  }
+}

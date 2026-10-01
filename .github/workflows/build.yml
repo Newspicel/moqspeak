@@ -1,0 +1,129 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # zgui is consumed as a sibling checkout at this commit (see client/Cargo.toml path deps).
+  ZGUI_REPO: zortax/zgui
+  ZGUI_REV: ec755561d1f3f012163070c20d860e1cbef1907c
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x86_64
+            os: ubuntu-24.04
+            exe: moqspeak
+          - name: macos-arm64
+            os: macos-14
+            exe: moqspeak
+          - name: windows-x86_64
+            os: windows-latest
+            exe: moqspeak.exe
+    defaults:
+      run:
+        shell: bash
+        working-directory: moqspeak
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: moqspeak
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.ZGUI_REPO }}
+          ref: ${{ env.ZGUI_REV }}
+          path: zgui
+
+      - name: install system libraries (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config cmake nasm libasound2-dev \
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libxcb1-dev libxcursor-dev libxi-dev libxrandr-dev libfontconfig1-dev \
+            libxcb-randr0-dev libxcb-shm0-dev libdbus-1-dev libpipewire-0.3-dev \
+            libegl-dev libgbm-dev clang
+
+      - name: install tools (macos)
+        if: runner.os == 'macOS'
+        run: brew install cmake nasm || true
+
+      - name: install tools (windows)
+        if: runner.os == 'Windows'
+        run: choco install nasm -y --no-progress || true
+
+      # rust-toolchain.toml pins the nightly zgui needs; rustup installs it on first use.
+      - name: toolchain
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: moqspeak
+
+      - name: test
+        run: cargo test -p moqspeak --locked
+
+      - name: build release
+        run: cargo build -p moqspeak --release --locked
+
+      - name: package (linux)
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p dist/moqspeak
+          cp target/release/moqspeak README.md dist/moqspeak/
+          cp client/assets/icons/LICENSE dist/moqspeak/LICENSE-lucide
+          tar -C dist -czf dist/moqspeak-${{ matrix.name }}.tar.gz moqspeak
+
+      - name: package (macos)
+        if: runner.os == 'macOS'
+        run: |
+          APP=dist/moqspeak.app
+          mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
+          cp target/release/moqspeak $APP/Contents/MacOS/moqspeak
+          VERSION=$(grep -m1 '^version' client/Cargo.toml | cut -d'"' -f2)
+          sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > $APP/Contents/Info.plist
+          codesign --force --deep --sign - $APP
+          cd dist && ditto -c -k --keepParent moqspeak.app moqspeak-${{ matrix.name }}.zip
+
+      - name: package (windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p dist/moqspeak
+          cp target/release/moqspeak.exe README.md dist/moqspeak/
+          cp client/assets/icons/LICENSE dist/moqspeak/LICENSE-lucide
+          cd dist && 7z a moqspeak-${{ matrix.name }}.zip moqspeak
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moqspeak-${{ matrix.name }}
+          path: |
+            moqspeak/dist/*.tar.gz
+            moqspeak/dist/*.zip
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

@@ -1,0 +1,27 @@
+[package]
+name = "moqspeak"
+version = "0.1.0"
+edition = "2024"
+description = "A TeamSpeak-style voice client built on zgui and Media over QUIC"
+
+[dependencies]
+zgui = { path = "../../zgui/crates/zgui" }
+zgui-ui = { path = "../../zgui/crates/zgui-ui" }
+zgui-ui-tokens = { path = "../../zgui/crates/zgui-ui-tokens" }
+zgui-ui-icons = { path = "../../zgui/crates/zgui-ui-icons" }
+cpal = "0.18"
+opus = "0.4"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
+tokio-tungstenite = { version = "0.30", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+url = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+directories = "6"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+moq-tokio = "0.19.20"
+moq-net = "0.3.8"
+bytes = "1"
