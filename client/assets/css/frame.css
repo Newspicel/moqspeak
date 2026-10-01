@@ -29,10 +29,16 @@
     height: 100%;
 }
 
-/* macOS draws its own window buttons at the leading corner, so the trailing edge keeps no room
-   for keys. */
-.ms-frame[data-platform="macos"] {
+/* Where the desktop draws the frame, its window buttons stand at the leading corner. The
+   trailing edge keeps no room for keys, and the leading edge of a head keeps `--ms-lead` free for
+   the buttons. In full screen the buttons are gone. */
+.ms-frame[data-frame="system"] {
     --ms-keys: var(--zui-space-sm);
+    --ms-lead: 76px;
+}
+
+.ms-frame[data-frame="system"][data-window="full"] {
+    --ms-lead: var(--zui-space-sm);
 }
 
 .ms-stage {
@@ -79,8 +85,10 @@
 }
 
 /* The frame that holds the resize strips covers the whole window, so it lets every press
-   through. Only the strips themselves take one. */
+   through. Only the strips themselves take one. A maximised or full-screen window has no edges to
+   drag. */
 .ms-edges { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+.ms-frame[data-window] .ms-edges { display: none; }
 .ms-edge { position: absolute; pointer-events: auto; }
 .ms-edge--n { top: 0; left: var(--ms-grab); right: var(--ms-grab); height: var(--ms-grab); }
 .ms-edge--s { bottom: 0; left: var(--ms-grab); right: var(--ms-grab); height: var(--ms-grab); }

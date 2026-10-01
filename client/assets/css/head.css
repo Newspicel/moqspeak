@@ -16,9 +16,9 @@
     padding-right: var(--zui-space-sm);
 }
 
-/* The macOS window buttons stand at the leading corner. */
-.ms-frame[data-platform="macos"] .ms-head {
-    padding-left: 76px;
+/* The desktop's window buttons stand at the leading corner. */
+.ms-frame[data-frame="system"] .ms-head {
+    padding-left: var(--ms-lead);
 }
 
 .ms-head__gap {

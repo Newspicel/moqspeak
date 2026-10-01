@@ -10,6 +10,8 @@ use crate::ui::dialogs::DialogsProps;
 use crate::ui::frame::controls::WindowControlsProps;
 use crate::ui::frame::edges::ResizeEdgesProps;
 use crate::ui::frame::ghost::DragGhostProps;
+use crate::ui::frame::placement::Placement;
+use crate::ui::frame::source::FrameSource;
 use crate::ui::head::HeadProps;
 use crate::ui::home::HomeProps;
 use crate::ui::log::LogDockProps;
@@ -34,12 +36,14 @@ pub fn Frame() -> impl IntoView {
     let online = move || state.online();
     let settings = move || state.settings_open.get();
     let chat_open = move || state.chat.with(|c| c.open) && online() && !settings();
+    let placement = Placement::watch();
 
     view! {
         stack(
             class = "ms-frame",
             attr:data-chat = move || chat_open().then(|| "open".to_owned()),
-            attr:data-platform = cfg!(target_os = "macos").then(|| "macos".to_owned()),
+            attr:data-frame = FrameSource::CURRENT.token(),
+            attr:data-window = move || placement.get().token().map(str::to_owned),
             on:key_down = move |ev| {
                 if is_ptt(&ev.key) {
                     state.set_ptt(true);

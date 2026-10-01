@@ -2,7 +2,7 @@
 
 use zgui::prelude::*;
 
-use crate::ui::frame::controls::own_frame;
+use crate::ui::frame::source::own_frame;
 use crate::ui::parts::Erase;
 
 /// Every edge and corner, with the class that places it.
@@ -17,7 +17,8 @@ const EDGES: [(ResizeEdge, &str); 8] = [
     (ResizeEdge::SouthEast, "ms-edge ms-edge--se"),
 ];
 
-/// The grab strips, where the window draws its own frame.
+/// The grab strips, where the window draws its own frame. CSS hides them while the window is
+/// maximised or full screen.
 #[component]
 pub fn ResizeEdges() -> impl IntoView {
     let Some(window) = try_use_window() else {

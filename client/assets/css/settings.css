@@ -27,8 +27,8 @@
     font-weight: var(--zui-type-weight-medium);
 }
 
-.ms-frame[data-platform="macos"] .ms-settings__head {
-    padding-left: 68px;
+.ms-frame[data-frame="system"] .ms-settings__head {
+    padding-left: calc(var(--ms-lead) - var(--zui-space-sm));
 }
 
 .ms-settings .zui-settings__page {

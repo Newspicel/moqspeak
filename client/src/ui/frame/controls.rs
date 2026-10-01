@@ -2,20 +2,9 @@
 
 use zgui::prelude::*;
 
+use crate::ui::frame::source::own_frame;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{Erase, press};
-
-/// Whether the desktop draws the frame around the window.
-///
-/// macOS keeps its frame for a window that asks for no title bar, so the window buttons, the
-/// corners and the resize edges belong to the system. The other desktops hand the whole frame
-/// over, and the window draws them itself.
-pub const PLATFORM_FRAME: bool = cfg!(target_os = "macos");
-
-/// Draws `view` where the desktop leaves it to the window.
-pub fn own_frame(view: impl IntoView + 'static) -> AnyView {
-    if PLATFORM_FRAME { ().any() } else { view.any() }
-}
 
 /// One window key.
 fn key(
