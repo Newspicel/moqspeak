@@ -93,7 +93,7 @@ fn ConnectBody() -> impl IntoView {
     view! {
                 DialogHeader {
                     DialogTitle {"Connect"}
-                    DialogDescription {"Server address is the Worker host and server name, e.g. moqspeak.newspicel.workers.dev/public"}
+                    DialogDescription {"Server address is the Worker host and server name, e.g. moq.newspicel.dev/public"}
                 }
                 column(class = "form") {
                     Row(label = "Server Address") {

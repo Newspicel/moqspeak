@@ -82,7 +82,7 @@ pub struct Settings {
     pub echo_cancellation: bool,
 }
 
-pub const DEFAULT_ADDRESS: &str = "moqspeak.newspicel.workers.dev/public";
+pub const DEFAULT_ADDRESS: &str = "moq.newspicel.dev/public";
 
 impl Default for Settings {
     fn default() -> Self {

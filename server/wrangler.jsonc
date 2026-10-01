@@ -3,6 +3,9 @@
   "name": "moqspeak",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-01",
+  "routes": [{ "pattern": "moq.newspicel.dev", "custom_domain": true }],
+  // Kept so clients that still have the old address saved keep working.
+  "workers_dev": true,
   "durable_objects": {
     "bindings": [
       { "name": "SERVERS", "class_name": "VoiceServer" },

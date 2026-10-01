@@ -40,7 +40,7 @@ time you share.
 ## Using moqspeak
 
 Open **Connections → Connect** and enter a server address such as
-`moqspeak.newspicel.workers.dev/public`. The part after the slash is the server's name. Any name
+`moq.newspicel.dev/public`. The part after the slash is the server's name. Any name
 works, and a new name creates a new server with a default set of channels.
 
 | To | Do |
@@ -97,7 +97,7 @@ assembly are built from source.
 
 ```sh
 cargo run -p moqspeak --release                                    # start the app
-cargo run -p moqspeak --release -- moqspeak.newspicel.workers.dev/demo Ada     # connect at start
+cargo run -p moqspeak --release -- moq.newspicel.dev/demo Ada     # connect at start
 ```
 
 To build and install the macOS app bundle:
@@ -112,7 +112,7 @@ For testing with one machine, start a headless participant. It joins a channel, 
 seconds and prints whom it hears. With `--share-pattern` it also shares a moving test pattern.
 
 ```sh
-cargo run -p moqspeak -- --bot moqspeak.newspicel.workers.dev/demo BeepBot Lobby --share-pattern
+cargo run -p moqspeak -- --bot moq.newspicel.dev/demo BeepBot Lobby --share-pattern
 ```
 
 ## Hosting your own server
