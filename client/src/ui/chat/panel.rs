@@ -10,6 +10,7 @@ use zgui_ui::prelude::*;
 
 use crate::model::ClientId;
 use crate::ui::chat::composer::ComposerProps;
+use crate::ui::chat::fit::shown_width;
 use crate::ui::chat::grip::ChatGripProps;
 use crate::ui::chat::message::{MessageLineProps, starts_run};
 use crate::ui::chat::strip::TabStripProps;
@@ -66,7 +67,8 @@ pub fn ChatPanel(
     };
     let close = Rc::new(move || state.chat.update(|c| c.toggle()));
     let resizing = RwSignal::new_local(false);
-    let width = move || Some(format!("{}px", state.chat_width.get()));
+    let fitted = shown_width(state);
+    let width = move || Some(format!("{}px", fitted.get()));
 
     view! {
         column(
@@ -76,7 +78,7 @@ pub fn ChatPanel(
             style:width = move || if open.get() { width() } else { Some("0px".to_owned()) },
             a11y:hidden = move || !open.get()
         ) {
-            ChatGrip(resizing = resizing)
+            ChatGrip(resizing = resizing, shown = fitted)
             column(class = "ms-chat__inner", style:width = width) {
                 row(class = "ms-chat__head", on:pointer_down = press::move_window()) {
                     TabStrip {

@@ -19,6 +19,8 @@ pub fn dragged(from: f32, was: f32, at: f32) -> f32 {
 pub fn ChatGrip(
     /// Whether a drag is under way, which holds the column's width transition.
     resizing: RwSignal<bool, LocalStorage>,
+    /// The width the column stands at, which a drag and a step start from.
+    shown: Signal<f32, LocalStorage>,
 ) -> impl IntoView {
     let state = AppState::expect();
     let from: RwSignal<Option<(f32, f32)>, LocalStorage> = RwSignal::new_local(None);
@@ -47,7 +49,7 @@ pub fn ChatGrip(
                 }
                 ev.capture_pointer();
                 ev.stop_propagation();
-                from.set(Some((f32::from(ev.position.x), state.chat_width.get_untracked())));
+                from.set(Some((f32::from(ev.position.x), shown.get_untracked())));
                 resizing.set(true);
             },
             on:pointer_move = move |ev| {
@@ -64,7 +66,7 @@ pub fn ChatGrip(
                 end();
             },
             on:key_down = move |ev| {
-                let width = state.chat_width.get_untracked();
+                let width = shown.get_untracked();
                 match &ev.key {
                     Key::Named(NamedKey::ArrowLeft) => set(width + STEP),
                     Key::Named(NamedKey::ArrowRight) => set(width - STEP),
