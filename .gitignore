@@ -7,3 +7,7 @@ tokens.txt
 server/worker-configuration.d.ts
 dist/
 .cloudflare/
+
+# The global "Icon" pattern targets macOS folder icons; this directory holds the app icon.
+!packaging/icon/
+!packaging/icon/*
