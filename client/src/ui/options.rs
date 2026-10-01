@@ -4,25 +4,14 @@ use std::sync::Arc;
 use std::sync::atomic::Ordering;
 
 use zgui::prelude::*;
-use zgui::reactive::{LocalStorage, RenderEffect, StoredValue, UnsyncCallback};
+use zgui::reactive::{LocalStorage, StoredValue, UnsyncCallback};
 use zgui_ui::prelude::*;
 
 use crate::audio::{Audio, DeviceInfo, VoiceMode, list_devices};
-use crate::ui::state::{AppState, Modal, Theme};
+use crate::ui::state::{AppState, Theme, mode_from_str, mode_to_str};
 
 /// The value a device select uses for "follow the system default".
 const SYSTEM: &str = "__system__";
-
-fn open_binding(state: AppState) -> RwSignal<bool, LocalStorage> {
-    let open = RwSignal::new_local(true);
-    let effect = RenderEffect::new(move |_| {
-        if !open.get() {
-            state.modal.set(Modal::None);
-        }
-    });
-    on_cleanup_local(move || drop(effect));
-    open
-}
 
 /// A titled group of settings.
 #[component]
@@ -129,9 +118,8 @@ fn DevicePicker(input: bool, info: RwSignal<DeviceInfo, LocalStorage>) -> impl I
 }
 
 #[component]
-pub fn OptionsDialog() -> impl IntoView {
+pub fn OptionsBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
     let settings = state.settings.get_untracked();
     let threshold = RwSignal::new_local(settings.threshold_db as f64);
     let gain = RwSignal::new_local((settings.input_gain * 100.0) as f64);
@@ -154,43 +142,39 @@ pub fn OptionsDialog() -> impl IntoView {
     on_cleanup_local(move || drop(timer));
 
     let loopback = RwSignal::new_local(shared.loopback.load(Ordering::Relaxed));
-    let mode_button = move |mode: VoiceMode, label: &'static str| {
-        view! {
-            control(
-                class = "seg",
-                class:selected = move || state.voice_mode.get() == mode,
-                tabindex = Focus::Sequential,
-                a11y:role = Role::RadioButton,
-                on:click = move |_| state.set_voice_mode(mode)
-            ) {{label}}
-        }
-    };
-    let theme_button = move |theme: Theme, label: &'static str| {
-        view! {
-            control(
-                class = "seg",
-                class:selected = move || state.theme.get() == theme,
-                tabindex = Focus::Sequential,
-                a11y:role = Role::RadioButton,
-                on:click = move |_| state.set_theme(theme)
-            ) {{label}}
-        }
-    };
+    let mode = Binding::controlled(
+        Signal::derive_local(move || vec![mode_to_str(state.voice_mode.get()).to_owned()]),
+        move |v: Vec<String>| {
+            if let Some(m) = v.first() {
+                state.set_voice_mode(mode_from_str(m));
+            }
+        },
+    );
+    let theme = Binding::controlled(
+        Signal::derive_local(move || vec![state.theme.get().name().to_owned()]),
+        move |v: Vec<String>| {
+            if let Some(t) = v.first() {
+                state.set_theme(Theme::parse(t));
+            }
+        },
+    );
+    let page = RwSignal::new_local("capture".to_owned());
     let pct = |db: f32| ((db + 80.0) / 80.0 * 100.0).clamp(0.0, 100.0);
 
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog ts-options") {
                 DialogHeader {
                     DialogTitle {"Options"}
                 }
-                Tabs(default_value = "capture", label = "Options", class = "opt-tabs") {
+                // The strip is zgui-ui's; the pages are plain branches, because switching a
+                // TabsContent inside a Dialog drops the dialog's centring (zortax/zgui#2).
+                Tabs(value = page, label = "Options", class = "opt-tabs") {
                     TabsList {
                         TabsTrigger(value = "capture") {"Capture"}
                         TabsTrigger(value = "playback") {"Playback"}
                         TabsTrigger(value = "appearance") {"Appearance"}
                     }
-                    TabsContent(value = "capture") {
+                }
+                    if move || page.get() == "capture" {
                         column(class = "opt-page") {
                             Section(title = "Microphone") {
                                 Setting(label = "Device") { DevicePicker(input = true, info = info) }
@@ -229,10 +213,10 @@ pub fn OptionsDialog() -> impl IntoView {
                                 }
                             }
                             Section(title = "Transmission") {
-                                row(class = "segmented", a11y:role = Role::RadioGroup) {
-                                    {mode_button(VoiceMode::Activation, "Voice activation")}
-                                    {mode_button(VoiceMode::PushToTalk, "Push-to-talk")}
-                                    {mode_button(VoiceMode::Continuous, "Continuous")}
+                                ToggleGroup(value = mode, variant = ToggleVariant::Outline, label = "Transmission", class = "picker") {
+                                    ToggleGroupItem(value = "activation") {"Voice activation"}
+                                    ToggleGroupItem(value = "ptt") {"Push-to-talk"}
+                                    ToggleGroupItem(value = "continuous") {"Continuous"}
                                 }
                                 if move || state.voice_mode.get() == VoiceMode::PushToTalk {
                                     text(class = "opt-hint") {"Hold F1 anywhere, ` outside text fields, or the toolbar button."}
@@ -258,10 +242,8 @@ pub fn OptionsDialog() -> impl IntoView {
                                 }
                             }
                             Section(title = "Test") {
-                                control(
-                                    class = "btn",
-                                    class:btn-primary = move || loopback.get(),
-                                    tabindex = Focus::Sequential,
+                                Button(
+                                    variant = ButtonVariant::Outline,
                                     on:click = move |_| {
                                         let on = !loopback.get_untracked();
                                         loopback.set(on);
@@ -271,7 +253,7 @@ pub fn OptionsDialog() -> impl IntoView {
                             }
                         }
                     }
-                    TabsContent(value = "playback") {
+                    if move || page.get() == "playback" {
                         column(class = "opt-page") {
                             Section(title = "Speakers") {
                                 Setting(label = "Device") { DevicePicker(input = false, info = info) }
@@ -285,17 +267,17 @@ pub fn OptionsDialog() -> impl IntoView {
                             }
                         }
                     }
-                    TabsContent(value = "appearance") {
+                    if move || page.get() == "appearance" {
                         column(class = "opt-page") {
                             Section(title = "Theme") {
-                                row(class = "segmented", a11y:role = Role::RadioGroup) {
-                                    {theme_button(Theme::Dark, "Dark")}
-                                    {theme_button(Theme::Light, "Light")}
+                                ToggleGroup(value = theme, variant = ToggleVariant::Outline, label = "Theme", class = "picker") {
+                                    ToggleGroupItem(value = "system") {"System"}
+                                    ToggleGroupItem(value = "dark") {"Dark"}
+                                    ToggleGroupItem(value = "light") {"Light"}
                                 }
                             }
                         }
                     }
-                }
                 column(class = "opt-status") {
                     text {{move || format!("Microphone: {}", info.get().input.unwrap_or_else(|| "none".into()))}}
                     text {{move || format!("Speakers: {}", info.get().output.unwrap_or_else(|| "none".into()))}}
@@ -304,7 +286,5 @@ pub fn OptionsDialog() -> impl IntoView {
                     }
                 }
                 DialogFooter { DialogClose {"Done"} }
-            }
-        }
     }
 }

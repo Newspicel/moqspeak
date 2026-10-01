@@ -29,6 +29,7 @@ pub fn Shell() -> impl IntoView {
             class = "shell",
             class:dark = move || state.theme.get() == Theme::Dark,
             class:light = move || state.theme.get() == Theme::Light,
+            class:system = move || state.theme.get() == Theme::System,
             on:key_down = move |ev| {
                 if is_ptt(&ev.key) {
                     state.set_ptt(true);
@@ -56,6 +57,14 @@ pub fn Shell() -> impl IntoView {
                 state.pointer.set(at);
             },
             on:pointer_up = move |_| state.finish_drag(),
+            // A release can be lost when the row it targeted was rebuilt mid-press; the next press
+            // ends whatever drag is still hanging.
+            on:pointer_down = move |_| {
+                if state.drag.with_untracked(|d| d.as_ref().is_some_and(|d| d.active)) {
+                    state.drag.set(None);
+                    state.drop_target.set(None);
+                }
+            },
             class:dragging = move || state.drag.with(|d| d.as_ref().is_some_and(|d| d.active))
         ) {
             MainMenu()

@@ -3,7 +3,7 @@
 use zgui::prelude::*;
 
 use crate::ui::IntoAny;
-use zgui::reactive::RenderEffect;
+use zgui::reactive::{RenderEffect, UnsyncCallback};
 use zgui::view::{ScrollBehavior, ScrollTarget};
 use zgui_ui::prelude::*;
 
@@ -60,44 +60,41 @@ fn LogLine(line: Line) -> impl IntoView {
     }
 }
 
-/// One tab under the log.
+/// One chat tab trigger: an icon, the title and an unread dot. Private tabs close from their
+/// context menu, as in TeamSpeak.
 #[component]
-fn ChatTab(
-    tab: Tab,
-    svg: &'static str,
-    title: Signal<String>,
-    #[prop(default = false)] closable: bool,
-) -> impl IntoView {
+fn ChatTab(tab: Tab, svg: &'static str, title: Signal<String>) -> impl IntoView {
     let state = AppState::expect();
     let key = tab_key(&tab);
-    let selected = {
-        let tab = tab.clone();
-        move || state.tab.with(|t| *t == tab)
+    let unread = {
+        let key = key.clone();
+        Signal::derive(move || state.unread.with(|u| u.contains(&key)))
     };
-    let unread = move || state.unread.with(|u| u.contains(&key));
-    let close_id = match &tab {
-        Tab::Private(id) => Some(*id),
-        _ => None,
-    };
-    view! {
-        control(
-            class = "chat-tab",
-            class:selected = selected,
-            class:unread = unread,
-            tabindex = Focus::Sequential,
-            a11y:role = Role::Tab,
-            on:click = move |_| state.select_tab(tab.clone())
-        ) {
-            Ico(svg = svg)
-            text {{move || title.get()}}
-            if move || closable {
-                control(
-                    class = "chat-tab-close",
-                    a11y:label = "Close tab",
-                    on:click:stop = move |_| if let Some(id) = close_id { state.close_tab(id) }
-                ) {"×"}
+    let trigger = {
+        let key = key.clone();
+        move || {
+            view! {
+                TabsTrigger(value = key.clone(), class = "chat-tab") {
+                    Ico(svg = svg)
+                    text {{move || title.get()}}
+                    if move || unread.get() {
+                        box(class = "unread-dot") {}
+                    }
+                }
             }
         }
+    };
+    match tab {
+        Tab::Private(id) => view! {
+            ContextMenu {
+                ContextMenuTrigger { {trigger()} }
+                ContextMenuContent {
+                    MenuItem(on_select = Some(UnsyncCallback::new(move |_: ()| state.close_tab(id)))) {"Close Tab"}
+                }
+            }
+        }
+        .into_any(),
+        _ => trigger().into_any(),
     }
 }
 
@@ -128,6 +125,22 @@ pub fn ChatPanel() -> impl IntoView {
     });
     on_cleanup_local(move || drop(follow));
 
+    // The tab strip speaks strings; the state speaks tabs.
+    let current = Binding::controlled(
+        Signal::derive_local(move || tab_key(&state.tab.get())),
+        move |key: String| {
+            let tab = match key.as_str() {
+                "server" => Tab::Server,
+                "channel" => Tab::Channel,
+                other => match other.strip_prefix('p').and_then(|id| id.parse().ok()) {
+                    Some(id) => Tab::Private(id),
+                    None => return,
+                },
+            };
+            state.select_tab(tab);
+        },
+    );
+
     let send = move || {
         let text = draft.get_untracked();
         if text.trim().is_empty() {
@@ -155,11 +168,13 @@ pub fn ChatPanel() -> impl IntoView {
 
     view! {
         column(class = "pane chat-pane") {
-            row(class = "chat-tabs", a11y:role = Role::TabList) {
-                ChatTab(tab = Tab::Server, svg = icons::SERVER, title = server_title)
-                ChatTab(tab = Tab::Channel, svg = icons::CHANNEL, title = channel_title)
-                for entry in move || state.tabs.get(), key = |t: &(u64, String)| t.clone() {
-                    ChatTab(tab = Tab::Private(entry.0), svg = icons::CHAT, title = Signal::derive(move || entry.1.clone()), closable = true)
+            Tabs(value = current, label = "Chat", class = "chat-tabs") {
+                TabsList(variant = TabsListVariant::Line) {
+                    ChatTab(tab = Tab::Server, svg = icons::SERVER, title = server_title)
+                    ChatTab(tab = Tab::Channel, svg = icons::CHANNEL, title = channel_title)
+                    for entry in move || state.tabs.get(), key = |t: &(u64, String)| t.clone() {
+                        ChatTab(tab = Tab::Private(entry.0), svg = icons::CHAT, title = Signal::derive(move || entry.1.clone()))
+                    }
                 }
             }
             ScrollArea(class = "chat-scroll", label = "Chat log") {
@@ -171,24 +186,22 @@ pub fn ChatPanel() -> impl IntoView {
                 }
             }
             row(class = "chat-input-row") {
-                Input(
-                    value = draft,
-                    placeholder = "Enter chat message…",
-                    label = "Chat message",
-                    class = "chat-input",
-                    disabled = Signal::derive_local(move || !state.connected()),
-                    on:key_down = move |ev| {
-                        if matches!(&ev.key, Key::Named(NamedKey::Enter)) {
-                            send();
+                InputGroup(class = "chat-input", disabled = Signal::derive_local(move || !state.connected())) {
+                    InputGroupInput(
+                        value = draft,
+                        placeholder = "Enter chat message…",
+                        disabled = Signal::derive_local(move || !state.connected()),
+                        a11y:label = "Chat message",
+                        on:key_down = move |ev| {
+                            if matches!(&ev.key, Key::Named(NamedKey::Enter)) {
+                                send();
+                            }
                         }
+                    )
+                    InputGroupAddon(align = InputGroupAddonAlign::InlineEnd) {
+                        InputGroupButton(variant = ButtonVariant::Default, size = InputGroupButtonSize::Sm, on:click = move |_| send()) {"Send"}
                     }
-                )
-                control(
-                    class = "btn btn-primary btn-send",
-                    tabindex = Focus::Sequential,
-                    a11y:label = "Send",
-                    on:click = move |_| send()
-                ) {"Send"}
+                }
             }
         }
     }

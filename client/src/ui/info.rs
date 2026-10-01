@@ -1,4 +1,4 @@
-//! The right-hand panel: details of whatever the tree has selected.
+//! The right-hand panel: details of whatever the tree has selected, as zgui-ui cards.
 
 use zgui::prelude::*;
 
@@ -6,12 +6,12 @@ use crate::ui::IntoAny;
 use zgui::reactive::UnsyncCallback;
 use zgui_ui::prelude::*;
 
-use crate::engine::{ConnStatus, MediaStatus};
+use crate::engine::MediaStatus;
 use crate::model::{ChannelId, ClientId};
-use crate::ui::avatar::AvatarProps;
+use crate::ui::avatar::UserAvatarProps;
 use crate::ui::icons::{self, IcoProps};
 use crate::ui::screen::ScreenViewProps;
-use crate::ui::state::{AppState, Modal, Selection};
+use crate::ui::state::{AppState, Selection};
 
 fn ago(ms: u64) -> String {
     let now = std::time::SystemTime::now()
@@ -60,15 +60,15 @@ pub fn InfoPanel() -> impl IntoView {
 #[component]
 fn Welcome() -> impl IntoView {
     view! {
-        column(class = "banner") {
-            text(class = "banner-title") {"moqspeak"}
-            text(class = "banner-sub") {"Media over QUIC Speak"}
+        Card(class = "info-card hero") {
+            CardHeader {
+                CardTitle {"moqspeak"}
+                CardDescription {"Media over QUIC Speak"}
+            }
+            CardContent {
+                label(class = "info-text") {"Connect to a server to talk with your friends."}
+            }
         }
-        label(class = "info-text") {
-            "A native voice client built with zgui. The control plane runs on a Cloudflare Worker; \
-             voice travels as Opus over Cloudflare's draft-16 MoQ relay."
-        }
-        label(class = "info-text") {"Use Connections → Connect, or the bookmark star in the toolbar, to join a server."}
     }
 }
 
@@ -77,28 +77,36 @@ fn ServerInfoView() -> impl IntoView {
     let state = AppState::expect();
     let s = state.server;
     view! {
-        column(class = "banner") {
-            text(class = "banner-title") {{move || s.with(|s| s.name.clone())}}
-            text(class = "banner-sub") {"moqspeak server"}
-        }
-        column(class = "info-fields") {
-            Field(name = "Address:", value = Signal::derive(move || state.settings.with(|s| s.address.clone())))
-            Field(name = "Clients online:", value = Signal::derive(move || state.clients.with(Vec::len).to_string()))
-            Field(name = "Channels:", value = Signal::derive(move || state.channels.with(Vec::len).to_string()))
-            Field(name = "Server age:", value = Signal::derive(move || ago(s.with(|s| s.created_at))))
-            Field(name = "Control plane:", value = Signal::derive(|| "Cloudflare Worker + Durable Object".to_owned()))
-            Field(name = "Voice transport:", value = Signal::derive(move || match state.media.get() {
-                MediaStatus::Off => "off".to_owned(),
-                MediaStatus::Connecting => "connecting…".to_owned(),
-                MediaStatus::Connected { .. } => "MoQ draft-16 (Cloudflare relay)".to_owned(),
-                MediaStatus::Failed(e) => format!("failed: {e}"),
-            }))
-            Field(name = "Codec:", value = Signal::derive(|| "Opus Voice, 48 kHz mono, 40 kbit/s".to_owned()))
+        Card(class = "info-card hero") {
+            CardHeader {
+                CardTitle {
+                    row(class = "card-title-row") {
+                        Ico(svg = icons::SERVER, class = "srv-ico")
+                        text {{move || s.with(|s| s.name.clone())}}
+                    }
+                }
+                CardDescription {{move || state.settings.with(|s| s.address.clone())}}
+                CardAction {
+                    Badge(variant = BadgeVariant::Secondary) {{move || format!("{} online", state.clients.with(Vec::len))}}
+                }
+            }
+            CardContent {
+                column(class = "info-fields") {
+                    Field(name = "Channels", value = Signal::derive(move || state.channels.with(Vec::len).to_string()))
+                    Field(name = "Server age", value = Signal::derive(move || ago(s.with(|s| s.created_at))))
+                    Field(name = "Voice", value = Signal::derive(move || match state.media.get() {
+                        MediaStatus::Off => "Off".to_owned(),
+                        MediaStatus::Connecting => "Connecting…".to_owned(),
+                        MediaStatus::Connected { .. } => "Connected".to_owned(),
+                        MediaStatus::Failed(_) => "Unavailable".to_owned(),
+                    }))
+                }
+            }
         }
         if move || s.with(|s| !s.welcome.is_empty()) {
-            column(class = "info-block") {
-                text(class = "info-heading") {"Welcome message"}
-                label(class = "info-text") {{move || s.with(|s| s.welcome.clone())}}
+            Card(class = "info-card") {
+                CardHeader { CardTitle {"Welcome message"} }
+                CardContent { label(class = "info-text") {{move || s.with(|s| s.welcome.clone())}} }
             }
         }
     }
@@ -113,43 +121,36 @@ fn ChannelInfo(id: ChannelId) -> impl IntoView {
             .clients
             .with(|c| c.iter().filter(|c| c.channel == id).count())
     };
-    let mine = move || state.my_client().is_some_and(|c| c.channel == id);
     view! {
-        column(class = "banner banner-channel") {
-            row(class = "banner-row") {
-                Ico(svg = icons::CHANNEL)
-                text(class = "banner-title") {{move || ch.get().map(|c| c.name).unwrap_or_default()}}
-            }
-            text(class = "banner-sub") {{move || ch.get().map(|c| if c.topic.is_empty() { "No topic".to_owned() } else { c.topic }).unwrap_or_default()}}
-        }
-        column(class = "info-fields") {
-            Field(name = "Clients:", value = Signal::derive(move || {
-                let max = ch.get().map(|c| c.max_clients).unwrap_or(0);
-                if max > 0 { format!("{} / {max}", count()) } else { format!("{} / unlimited", count()) }
-            }))
-            Field(name = "Type:", value = Signal::derive(move || {
-                if ch.get().is_some_and(|c| c.is_default) { "Permanent, default".to_owned() } else { "Permanent".to_owned() }
-            }))
-            Field(name = "Codec:", value = Signal::derive(|| "Opus Voice".to_owned()))
-            Field(name = "Media:", value = Signal::derive(|| "a MoQ broadcast per client: audio + screen".to_owned()))
-        }
-        if move || ch.get().is_some_and(|c| !c.description.is_empty()) {
-            column(class = "info-block") {
-                text(class = "info-heading") {"Description"}
-                label(class = "info-text") {{move || ch.get().map(|c| c.description).unwrap_or_default()}}
-            }
-        }
-        row(class = "info-actions") {
-            if move || !mine() {
-                control(class = "btn btn-primary", tabindex = Focus::Sequential, on:click = move |_| state.join(id)) {
-                    "Switch to channel"
+        Card(class = "info-card hero") {
+            CardHeader {
+                CardTitle {
+                    row(class = "card-title-row") {
+                        Ico(svg = icons::CHANNEL, class = "ch-ico")
+                        text {{move || ch.get().map(|c| c.name).unwrap_or_default()}}
+                    }
+                }
+                CardDescription {{move || ch.get().map(|c| if c.topic.is_empty() { "No topic".to_owned() } else { c.topic }).unwrap_or_default()}}
+                CardAction {
+                    if move || ch.get().is_some_and(|c| c.is_default) {
+                        Badge(variant = BadgeVariant::Secondary) {"Default"}
+                    }
                 }
             }
-            control(
-                class = "btn",
-                tabindex = Focus::Sequential,
-                on:click = move |_| state.modal.set(Modal::CreateChannel { parent: Some(id) })
-            ) {"Create sub-channel"}
+            CardContent {
+                column(class = "info-fields") {
+                    Field(name = "Clients", value = Signal::derive(move || {
+                        let max = ch.get().map(|c| c.max_clients).unwrap_or(0);
+                        if max > 0 { format!("{} / {max}", count()) } else { format!("{} / unlimited", count()) }
+                    }))
+                }
+            }
+        }
+        if move || ch.get().is_some_and(|c| !c.description.is_empty()) {
+            Card(class = "info-card") {
+                CardHeader { CardTitle {"Description"} }
+                CardContent { label(class = "info-text") {{move || ch.get().map(|c| c.description).unwrap_or_default()}} }
+            }
         }
     }
 }
@@ -166,90 +167,107 @@ fn ClientInfo(id: ClientId) -> impl IntoView {
             .with_untracked(|v| v.get(&id).copied().unwrap_or(1.0)) as f64
             * 100.0,
     );
-    let locally_muted = move || state.local_mutes.with(|m| m.contains(&id));
     let watching = RwSignal::new_local(true);
+    let status = move || {
+        if talking() {
+            ("Talking", BadgeVariant::Default)
+        } else if let Some(c) = c.get() {
+            if c.away {
+                ("Away", BadgeVariant::Outline)
+            } else if c.muted {
+                ("Mic muted", BadgeVariant::Destructive)
+            } else if c.deaf {
+                ("Sound muted", BadgeVariant::Destructive)
+            } else {
+                ("Online", BadgeVariant::Success)
+            }
+        } else {
+            ("Offline", BadgeVariant::Outline)
+        }
+    };
 
     view! {
-        column(class = "banner banner-client", class:talking = talking) {
-            row(class = "banner-row") {
-                Avatar(name = c.get_untracked().map(|c| c.name).unwrap_or_default(), talking = Signal::derive(talking), size = "lg")
-                text(class = "banner-title") {{move || c.get().map(|c| c.name).unwrap_or_default()}}
+        Card(class = "info-card hero", class:talking = talking) {
+            CardHeader {
+                CardTitle {
+                    row(class = "card-title-row") {
+                        UserAvatar(name = c.get_untracked().map(|c| c.name).unwrap_or_default(), talking = Signal::derive(talking), size = AvatarSize::Lg)
+                        column(class = "card-title-text") {
+                            text {{move || c.get().map(|c| c.name).unwrap_or_default()}}
+                            text(class = "card-sub") {{move || c.get().and_then(|c| state.channel(c.channel)).map(|ch| format!("in {}", ch.name)).unwrap_or_default()}}
+                        }
+                    }
+                }
+                CardAction {
+                    {move || {
+                        let (label, variant) = status();
+                        view! { Badge(variant = variant) {{label}} }
+                    }}
+                }
             }
-            text(class = "banner-sub") {{move || {
-                if talking() { "Talking".to_owned() }
-                else if let Some(c) = c.get() {
-                    if c.away { format!("Away {}", c.away_message) }
-                    else if c.muted { "Microphone muted".to_owned() }
-                    else if c.deaf { "Speakers muted".to_owned() }
-                    else { "Online".to_owned() }
-                } else { String::new() }
-            }}}
         }
         if move || c.get().is_some_and(|c| c.sharing) && !me() {
-            column(class = "info-block screen-block") {
-                row(class = "screen-head") {
-                    text(class = "info-heading") {"SCREEN"}
-                    text(class = "node-live") {"LIVE"}
-                    spacer()
-                    control(class = "btn", tabindex = Focus::Sequential, on:click = move |_| watching.update(|w| *w = !*w)) {
-                        {move || if watching.get() { "Stop watching" } else { "Watch" }}
+            Card(class = "info-card") {
+                CardHeader {
+                    CardTitle {"Screen"}
+                    CardAction {
+                        row(class = "card-actions") {
+                            Badge(variant = BadgeVariant::Destructive) {"LIVE"}
+                            Button(variant = ButtonVariant::Outline, size = ButtonSize::Sm, on:click = move |_| watching.update(|w| *w = !*w)) {
+                                {move || if watching.get() { "Hide" } else { "Watch" }}
+                            }
+                            Button(size = ButtonSize::Sm, on:click = move |_| {
+                                let name = c.get_untracked().map(|c| c.name).unwrap_or_default();
+                                crate::ui::screen::pop_out(state, id, name);
+                            }) {"Open in window"}
+                        }
                     }
-                    control(class = "btn btn-primary", tabindex = Focus::Sequential, on:click = move |_| {
-                        let name = c.get_untracked().map(|c| c.name).unwrap_or_default();
-                        crate::ui::screen::pop_out(state, id, name);
-                    }) {"Open in window"}
                 }
                 if move || watching.get() {
-                    ScreenView(state = state, client = id, class = "screen-frame")
+                    CardContent {
+                        ScreenView(state = state, client = id, class = "screen-frame")
+                    }
                 }
             }
         }
         if move || me() && state.sharing.get() {
-            column(class = "info-block") {
-                text(class = "info-heading") {"SCREEN"}
-                text(class = "info-text") {"You are sharing your screen with your channel."}
+            Card(class = "info-card") {
+                CardHeader {
+                    CardTitle {"Screen"}
+                    CardDescription {"You are sharing your screen with your channel."}
+                }
             }
-        }
-        column(class = "info-fields") {
-            Field(name = "Channel:", value = Signal::derive(move || {
-                c.get().and_then(|c| state.channel(c.channel)).map(|ch| ch.name).unwrap_or_default()
-            }))
-            Field(name = "Online for:", value = Signal::derive(move || c.get().map(|c| ago(c.connected_at)).unwrap_or_default()))
-            Field(name = "Version:", value = Signal::derive(move || c.get().map(|c| format!("moqspeak {} on {}", c.version, c.platform)).unwrap_or_default()))
-            Field(name = "Client ID:", value = Signal::derive(move || id.to_string()))
-            Field(name = "Broadcast:", value = Signal::derive(move || c.get().map(|c| c.broadcast).unwrap_or_default()))
         }
         if move || !me() {
-            column(class = "info-block") {
-                text(class = "info-heading") {"Local volume"}
-                row(class = "volume-row") {
-                    Slider(
-                        value = volume,
-                        min = 0.0,
-                        max = 200.0,
-                        step = 5.0,
-                        label = "Volume",
-                        class = "volume-slider",
-                        on_change = UnsyncCallback::new(move |v: f64| state.set_volume(id, (v / 100.0) as f32))
-                    )
-                    text(class = "volume-value") {{move || format!("{:.0}%", volume.get())}}
+            Card(class = "info-card") {
+                CardHeader {
+                    CardTitle {"Volume"}
+                    CardDescription {"Only you hear this change."}
                 }
-            }
-            row(class = "info-actions") {
-                control(class = "btn btn-primary", tabindex = Focus::Sequential, on:click = move |_| state.open_private(id)) {
-                    "Send message"
-                }
-                control(class = "btn", tabindex = Focus::Sequential, on:click = move |_| {
-                    let name = c.get_untracked().map(|c| c.name).unwrap_or_default();
-                    state.modal.set(Modal::Poke { to: id, name });
-                }) {"Poke"}
-                control(class = "btn", tabindex = Focus::Sequential, on:click = move |_| state.set_local_mute(id, !locally_muted())) {
-                    {move || if locally_muted() { "Unmute locally" } else { "Mute locally" }}
+                CardContent {
+                    row(class = "volume-row") {
+                        Slider(
+                            value = volume,
+                            min = 0.0,
+                            max = 200.0,
+                            step = 5.0,
+                            label = "Volume",
+                            class = "volume-slider",
+                            on_change = UnsyncCallback::new(move |v: f64| state.set_volume(id, (v / 100.0) as f32))
+                        )
+                        text(class = "volume-value") {{move || format!("{:.0}%", volume.get())}}
+                    }
                 }
             }
         }
-        if move || state.status.with(|s| *s != ConnStatus::Connected) {
-            label {"Disconnected"}
+        Card(class = "info-card") {
+            CardHeader { CardTitle {"Details"} }
+            CardContent {
+                column(class = "info-fields") {
+                    Field(name = "Online for", value = Signal::derive(move || c.get().map(|c| ago(c.connected_at)).unwrap_or_default()))
+                    Field(name = "Client", value = Signal::derive(move || c.get().map(|c| format!("moqspeak {} on {}", c.version, c.platform)).unwrap_or_default()))
+                }
+            }
         }
     }
 }

@@ -70,6 +70,7 @@ fn main() -> Result<(), zgui::Error> {
             }
             view! {
                 ThemeProvider(scheme = Signal::derive_local(move || match state.theme.get() {
+                    ui::state::Theme::System => ColorScheme::System,
                     ui::state::Theme::Dark => ColorScheme::Dark,
                     ui::state::Theme::Light => ColorScheme::Light,
                 })) {

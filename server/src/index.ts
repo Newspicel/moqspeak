@@ -174,7 +174,7 @@ export class VoiceServer extends DurableObject<Env> {
       t: "state",
       server: {
         name: this.serverName,
-        welcome: this.welcome,
+        welcome: `Welcome to ${this.serverName}!`,
         created_at: this.createdAt,
         relay: this.env.MOQ_RELAY,
         relay_id: this.env.MOQ_RELAY_ID ?? "",
@@ -219,7 +219,7 @@ export class VoiceServer extends DurableObject<Env> {
     const name = url.searchParams.get("server") ?? "moqspeak";
     if (!this.serverName) {
       this.serverName = name;
-      this.welcome = `Welcome to ${name}, a moqspeak server. Voice is carried over Media over QUIC.`;
+      this.welcome = `Welcome to ${name}!`;
       await this.ctx.storage.put("name", this.serverName);
       await this.ctx.storage.put("welcome", this.welcome);
     }

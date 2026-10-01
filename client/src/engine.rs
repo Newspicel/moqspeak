@@ -209,7 +209,9 @@ async fn run(
     events: UnboundedSender<Event>,
     mut packets: UnboundedReceiver<Packet>,
 ) {
+    const MAX_RETRIES: u32 = 6;
     let mut pending: Option<Command> = None;
+    let mut attempts = 0u32;
     loop {
         let next = match pending.take() {
             Some(c) => Some(c),
@@ -222,6 +224,7 @@ async fn run(
         let Some(command) = next else { return };
         match command {
             Command::Connect { address, nickname } => {
+                let started = std::time::Instant::now();
                 let outcome = session(
                     &audio,
                     &address,
@@ -231,12 +234,43 @@ async fn run(
                     &mut packets,
                 )
                 .await;
+                // A session that held for a while earns a fresh set of retries.
+                if started.elapsed() > Duration::from_secs(30) {
+                    attempts = 0;
+                }
                 match outcome {
                     Ok(next) => {
+                        attempts = 0;
                         let _ = events.send(Event::Status(ConnStatus::Disconnected));
                         pending = next;
                     }
+                    Err(e) if attempts < MAX_RETRIES => {
+                        attempts += 1;
+                        let wait = Duration::from_secs(1 << attempts.min(4));
+                        let _ = events.send(Event::Log {
+                            error: true,
+                            text: format!("{e:#}. Reconnecting in {} s…", wait.as_secs()),
+                        });
+                        let _ = events.send(Event::Media(MediaStatus::Off));
+                        let _ = events.send(Event::Talking(BTreeSet::new()));
+                        let _ = events.send(Event::Status(ConnStatus::Connecting(address.clone())));
+                        // Wait, unless the user decides something else first.
+                        tokio::select! {
+                            c = commands.recv() => match c {
+                                Some(Command::Disconnect) | None => {
+                                    attempts = 0;
+                                    let _ = events.send(Event::Status(ConnStatus::Disconnected));
+                                }
+                                other => pending = other,
+                            },
+                            _ = tokio::time::sleep(wait) => {
+                                pending = Some(Command::Connect { address, nickname });
+                            }
+                        }
+                        continue;
+                    }
                     Err(e) => {
+                        attempts = 0;
                         let text = format!("{e:#}");
                         let _ = events.send(Event::Log {
                             error: true,
@@ -295,7 +329,7 @@ async fn session(
     )));
     let _ = events.send(Event::Log {
         error: false,
-        text: format!("Trying to connect to server {}", address.ws_url),
+        text: format!("Connecting to {}…", address.server),
     });
     let (ws, _) = tokio::time::timeout(
         Duration::from_secs(10),
@@ -477,17 +511,14 @@ async fn session(
         session.stop();
     }
     let _ = ws_tx.send(Message::Close(None)).await;
-    if let Err(e) = &result {
+    if result.is_ok() {
         let _ = events.send(Event::Log {
-            error: true,
-            text: format!("{e:#}"),
+            error: false,
+            text: "Disconnected from server".into(),
         });
     }
-    let _ = events.send(Event::Log {
-        error: false,
-        text: "Disconnected from server".into(),
-    });
-    Ok(result.unwrap_or(None))
+    // A lost connection is an error, so the caller can reconnect.
+    result
 }
 
 /// Listens to every other client in my channel, and to nobody else.

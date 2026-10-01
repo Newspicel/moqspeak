@@ -75,7 +75,8 @@ pub struct Settings {
     pub output_volume: f32,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
-    pub theme: String,
+    /// "system", "dark" or "light".
+    pub theme_mode: String,
     pub noise_suppression: bool,
     pub smart_vad: bool,
 }
@@ -101,7 +102,7 @@ impl Default for Settings {
             output_volume: 1.0,
             input_device: None,
             output_device: None,
-            theme: "dark".into(),
+            theme_mode: "system".into(),
             noise_suppression: true,
             smart_vad: true,
         }
@@ -151,20 +152,22 @@ pub fn mode_to_str(m: VoiceMode) -> &'static str {
 /// The colour scheme.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Theme {
+    System,
     Dark,
     Light,
 }
 
 impl Theme {
     pub fn parse(s: &str) -> Self {
-        if s == "light" {
-            Theme::Light
-        } else {
-            Theme::Dark
+        match s {
+            "light" => Theme::Light,
+            "dark" => Theme::Dark,
+            _ => Theme::System,
         }
     }
     pub fn name(self) -> &'static str {
         match self {
+            Theme::System => "system",
             Theme::Dark => "dark",
             Theme::Light => "light",
         }
@@ -221,6 +224,7 @@ pub struct AppState {
     pub drop_target: RwSignal<Option<ChannelId>>,
     pub pointer: RwSignal<(f32, f32)>,
     pub collapsed: RwSignal<BTreeSet<ChannelId>>,
+    last_click: StoredValue<Option<(Selection, std::time::Instant)>>,
     pub ptt: RwSignal<bool>,
     pub local_mutes: RwSignal<BTreeSet<ClientId>>,
     pub volumes: RwSignal<HashMap<ClientId, f32>>,
@@ -236,7 +240,7 @@ impl AppState {
     pub fn new(engine: Engine) -> Self {
         let settings = Settings::load();
         let mode = mode_from_str(&settings.voice_mode);
-        let theme = Theme::parse(&settings.theme);
+        let theme = Theme::parse(&settings.theme_mode);
         let audio = &engine.audio.shared;
         audio.set_mode(mode);
         audio.threshold_db.set(settings.threshold_db);
@@ -272,6 +276,7 @@ impl AppState {
             drop_target: RwSignal::new(None),
             pointer: RwSignal::new((0.0, 0.0)),
             collapsed: RwSignal::new(BTreeSet::new()),
+            last_click: StoredValue::new(None),
             ptt: RwSignal::new(false),
             local_mutes: RwSignal::new(BTreeSet::new()),
             volumes: RwSignal::new(HashMap::new()),
@@ -435,6 +440,20 @@ impl AppState {
         }
     }
 
+    /// Records a click on `target` and says whether it completes a double click.
+    ///
+    /// zgui does not dispatch `double_click` yet (zortax/zgui#3), so the tree times its own.
+    pub fn click(&self, target: Selection) -> bool {
+        let now = std::time::Instant::now();
+        let double = self.last_click.with_value(|last| {
+            last.is_some_and(|(t, at)| t == target && now.duration_since(at).as_millis() < 400)
+        });
+        self.last_click
+            .set_value(if double { None } else { Some((target, now)) });
+        self.selected.set(target);
+        double
+    }
+
     /// Starts or stops sharing. With several monitors, asks which one first.
     pub fn toggle_share(&self) {
         if self.sharing.get_untracked() {
@@ -490,7 +509,7 @@ impl AppState {
 
     pub fn set_theme(&self, theme: Theme) {
         self.theme.set(theme);
-        self.update_settings(|s| s.theme = theme.name().into());
+        self.update_settings(|s| s.theme_mode = theme.name().into());
     }
 
     pub fn set_voice_mode(&self, mode: VoiceMode) {
@@ -672,7 +691,8 @@ impl AppState {
                     MediaStatus::Connected { relay, .. }
                         if !matches!(self.media.get_untracked(), MediaStatus::Connected { .. }) =>
                     {
-                        self.info(format!("Voice connected via Media over QUIC relay {relay}"));
+                        let _ = relay;
+                        self.info("Voice connected");
                     }
                     _ => {}
                 }

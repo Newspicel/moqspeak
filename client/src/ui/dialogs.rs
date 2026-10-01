@@ -1,47 +1,60 @@
-//! Connect, create channel, options, poke and about dialogs.
+//! Connect, create channel, options, poke, share and about dialogs.
+//!
+//! Every dialog stays mounted and opens through its `open` binding, which follows
+//! [`AppState::modal`]. Its body is rebuilt each time it opens, so its fields start fresh.
 
 use zgui::prelude::*;
 
-use crate::ui::IntoAny;
-use zgui::reactive::{LocalStorage, RenderEffect, StoredValue};
+use zgui::reactive::{LocalStorage, RenderEffect, StoredValue, UnsyncCallback};
 use zgui_ui::prelude::*;
 
 use crate::model::ClientMsg;
-use crate::ui::options::OptionsDialogProps;
+use crate::ui::options::OptionsBodyProps;
 use crate::ui::state::{AppState, Modal};
 
-/// Mounts whichever dialog the state asks for.
+/// Hosts one dialog, open while `is` matches the current modal.
 #[component]
-pub fn Dialogs() -> impl IntoView {
+fn ModalHost(
+    is: fn(&Modal) -> bool,
+    #[prop(into)] class: String,
+    children: ChildrenFn,
+) -> impl IntoView {
     let state = AppState::expect();
-    let kind = Memo::new(move |_| std::mem::discriminant(&state.modal.get()));
-    view! {
-        {move || {
-            kind.track();
-            match state.modal.get_untracked() {
-                Modal::None => ().into_any(),
-                Modal::Connect => view! { ConnectDialog() }.into_any(),
-                Modal::CreateChannel { parent } => view! { CreateChannelDialog(parent = parent) }.into_any(),
-                Modal::Options => view! { OptionsDialog() }.into_any(),
-                Modal::Poke { to, name } => view! { PokeDialog(to = to, name = name) }.into_any(),
-                Modal::Poked { from, text } => view! { PokedDialog(from = from, text = text) }.into_any(),
-                Modal::About => view! { AboutDialog() }.into_any(),
-                Modal::Share { monitors } => view! { ShareDialog(monitors = monitors) }.into_any(),
-            }
-        }}
-    }
-}
-
-/// A dialog that is open while mounted and clears the modal when it closes.
-fn open_binding(state: AppState) -> RwSignal<bool, LocalStorage> {
-    let open = RwSignal::new_local(true);
-    let effect = RenderEffect::new(move |_| {
-        if !open.get() {
+    let open: RwSignal<bool, LocalStorage> = RwSignal::new_local(false);
+    let sync = RenderEffect::new(move |_| {
+        let want = state.modal.with(|m| is(m));
+        if open.get_untracked() != want {
+            open.set(want);
+        }
+    });
+    on_cleanup_local(move || drop(sync));
+    let on_open_change = UnsyncCallback::new(move |next: bool| {
+        if !next && state.modal.with_untracked(|m| is(m)) {
             state.modal.set(Modal::None);
         }
     });
-    on_cleanup_local(move || drop(effect));
-    open
+    let class = StoredValue::new(class);
+    view! {
+        Dialog(open = open, on_open_change = on_open_change) {
+            DialogContent(class = class.get_value()) {
+                {children.view()}
+            }
+        }
+    }
+}
+
+/// Every dialog the application has.
+#[component]
+pub fn Dialogs() -> impl IntoView {
+    view! {
+        ModalHost(is = |m| matches!(m, Modal::Connect), class = "ts-dialog") { ConnectBody() }
+        ModalHost(is = |m| matches!(m, Modal::CreateChannel { .. }), class = "ts-dialog") { CreateChannelBody() }
+        ModalHost(is = |m| matches!(m, Modal::Options), class = "ts-dialog ts-options") { OptionsBody() }
+        ModalHost(is = |m| matches!(m, Modal::Poke { .. }), class = "ts-dialog") { PokeBody() }
+        ModalHost(is = |m| matches!(m, Modal::Poked { .. }), class = "ts-dialog") { PokedBody() }
+        ModalHost(is = |m| matches!(m, Modal::Share { .. }), class = "ts-dialog") { ShareBody() }
+        ModalHost(is = |m| matches!(m, Modal::About), class = "ts-dialog") { AboutBody() }
+    }
 }
 
 /// A label above a control.
@@ -56,9 +69,8 @@ fn Row(#[prop(into)] label: String, children: Children) -> impl IntoView {
 }
 
 #[component]
-fn ConnectDialog() -> impl IntoView {
+fn ConnectBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
     let settings = state.settings.get_untracked();
     let address = RwSignal::new_local(settings.address.clone());
     let nickname = RwSignal::new_local(settings.nickname.clone());
@@ -70,7 +82,7 @@ fn ConnectDialog() -> impl IntoView {
             return;
         }
         state.connect(a, n);
-        open.set(false);
+        state.modal.set(Modal::None);
     };
     let on_enter = move |ev: &mut EventCx<'_, zgui::view::events::KeyDown>| {
         if matches!(&ev.key, Key::Named(NamedKey::Enter)) {
@@ -79,8 +91,6 @@ fn ConnectDialog() -> impl IntoView {
     };
 
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {"Connect"}
                     DialogDescription {"Server address is the Worker host and server name, e.g. moqspeak.newspicel.workers.dev/public"}
@@ -97,15 +107,16 @@ fn ConnectDialog() -> impl IntoView {
                     DialogClose(variant = ButtonVariant::Outline) {"Cancel"}
                     Button(on:click = move |_| connect()) {"Connect"}
                 }
-            }
-        }
     }
 }
 
 #[component]
-fn CreateChannelDialog(parent: Option<u64>) -> impl IntoView {
+fn CreateChannelBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
+    let parent = match state.modal.get_untracked() {
+        Modal::CreateChannel { parent } => parent,
+        _ => None,
+    };
     let name = RwSignal::new_local(String::new());
     let topic = RwSignal::new_local(String::new());
     let description = RwSignal::new_local(String::new());
@@ -128,12 +139,10 @@ fn CreateChannelDialog(parent: Option<u64>) -> impl IntoView {
             parent,
             max_clients: max.get_untracked().trim().parse().unwrap_or(0),
         });
-        open.set(false);
+        state.modal.set(Modal::None);
     };
 
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {"Create Channel"}
                     DialogDescription {{subtitle.get_value()}}
@@ -148,15 +157,16 @@ fn CreateChannelDialog(parent: Option<u64>) -> impl IntoView {
                     DialogClose(variant = ButtonVariant::Outline) {"Cancel"}
                     Button(on:click = move |_| create()) {"Create"}
                 }
-            }
-        }
     }
 }
 
 #[component]
-fn PokeDialog(to: u64, name: String) -> impl IntoView {
+fn PokeBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
+    let (to, name) = match state.modal.get_untracked() {
+        Modal::Poke { to, name } => (to, name),
+        _ => (0, String::new()),
+    };
     let text = RwSignal::new_local(String::new());
     let title = StoredValue::new(format!("Poke {name}"));
     let poke = move || {
@@ -164,11 +174,9 @@ fn PokeDialog(to: u64, name: String) -> impl IntoView {
             to,
             text: text.get_untracked(),
         });
-        open.set(false);
+        state.modal.set(Modal::None);
     };
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {{title.get_value()}}
                     DialogDescription {"The message pops up on their screen."}
@@ -179,15 +187,16 @@ fn PokeDialog(to: u64, name: String) -> impl IntoView {
                     DialogClose(variant = ButtonVariant::Outline) {"Cancel"}
                     Button(on:click = move |_| poke()) {"Poke"}
                 }
-            }
-        }
     }
 }
 
 #[component]
-fn PokedDialog(from: String, text: String) -> impl IntoView {
+fn PokedBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
+    let (from, text) = match state.modal.get_untracked() {
+        Modal::Poked { from, text } => (from, text),
+        _ => (String::new(), String::new()),
+    };
     let title = StoredValue::new(format!("{from} poked you"));
     let body = StoredValue::new(if text.is_empty() {
         "(no message)".to_owned()
@@ -195,58 +204,50 @@ fn PokedDialog(from: String, text: String) -> impl IntoView {
         text
     });
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {{title.get_value()}}
                     DialogDescription {{body.get_value()}}
                 }
                 DialogFooter { DialogClose {"OK"} }
-            }
-        }
     }
 }
 
 #[component]
-fn ShareDialog(monitors: Vec<crate::screen::MonitorInfo>) -> impl IntoView {
+fn ShareBody() -> impl IntoView {
     let state = AppState::expect();
-    let open = open_binding(state);
+    let monitors = match state.modal.get_untracked() {
+        Modal::Share { monitors } => monitors,
+        _ => Vec::new(),
+    };
     let monitors = StoredValue::new(monitors);
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {"Share your screen"}
                     DialogDescription {"Everyone in your channel can watch. Pick a display."}
                 }
                 column(class = "monitor-list") {
                     for m in move || monitors.get_value(), key = |m: &crate::screen::MonitorInfo| m.id {
-                        control(
-                            class = "monitor",
-                            tabindex = Focus::Sequential,
-                            on:click = move |_| {
-                                state.send(crate::engine::Command::StartShare { monitor: m.id });
-                                open.set(false);
+                        Item(variant = ItemVariant::Outline) {
+                            ItemContent {
+                                ItemTitle {{format!("{}{}", m.name, if m.primary { " (main)" } else { "" })}}
+                                ItemDescription {{format!("{} × {}", m.width, m.height)}}
                             }
-                        ) {
-                            text(class = "monitor-name") {{format!("{}{}", m.name, if m.primary { " (main)" } else { "" })}}
-                            text(class = "monitor-size") {{format!("{} × {}", m.width, m.height)}}
+                            ItemActions {
+                                Button(size = ButtonSize::Sm, on:click = move |_| {
+                                    state.send(crate::engine::Command::StartShare { monitor: m.id });
+                                    state.modal.set(Modal::None);
+                                }) {"Share"}
+                            }
                         }
                     }
                 }
                 DialogFooter { DialogClose(variant = ButtonVariant::Outline) {"Cancel"} }
-            }
-        }
     }
 }
 
 #[component]
-fn AboutDialog() -> impl IntoView {
-    let state = AppState::expect();
-    let open = open_binding(state);
+fn AboutBody() -> impl IntoView {
     view! {
-        Dialog(open = open) {
-            DialogContent(class = "ts-dialog") {
                 DialogHeader {
                     DialogTitle {"About moqspeak"}
                     DialogDescription {{format!("Version {}", env!("CARGO_PKG_VERSION"))}}
@@ -257,7 +258,5 @@ fn AboutDialog() -> impl IntoView {
                     label {"Voice: Opus over Media over QUIC (moq-net, IETF draft-16) through Cloudflare's MoQ relay."}
                 }
                 DialogFooter { DialogClose {"Close"} }
-            }
-        }
     }
 }

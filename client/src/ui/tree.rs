@@ -7,7 +7,7 @@ use zgui::reactive::UnsyncCallback;
 use zgui_ui::prelude::*;
 
 use crate::model::{ChannelId, ClientId, ClientMsg};
-use crate::ui::avatar::AvatarProps;
+use crate::ui::avatar::UserAvatarProps;
 use crate::ui::icons::{self, IcoProps};
 use crate::ui::state::{AppState, Drag, Modal, Row, Selection, tree_rows};
 
@@ -36,18 +36,28 @@ pub fn ServerTree() -> impl IntoView {
     view! {
         column(class = "pane tree-pane") {
             if move || state.channels.with(Vec::is_empty) {
-                column(class = "tree-empty") {
-                    Ico(svg = icons::SERVER, class = "ico-big")
-                    label {{move || match state.status.get() {
-                        crate::engine::ConnStatus::Connecting(server) => format!("Connecting to {server}…"),
-                        crate::engine::ConnStatus::Failed(e) => format!("Connection failed: {e}"),
-                        _ => "Not connected. Use Connections → Connect to join a server.".to_owned(),
-                    }}}
-                    control(
-                        class = "btn btn-primary",
-                        tabindex = Focus::Sequential,
-                        on:click = move |_| state.modal.set(Modal::Connect)
-                    ) {"Connect…"}
+                Empty(class = "tree-empty") {
+                    EmptyHeader {
+                        EmptyMedia(variant = EmptyMediaVariant::Icon) {
+                            if move || matches!(state.status.get(), crate::engine::ConnStatus::Connecting(_)) {
+                                Spinner(label = "Connecting")
+                            } else {
+                                Ico(svg = icons::SERVER)
+                            }
+                        }
+                        EmptyTitle {{move || match state.status.get() {
+                            crate::engine::ConnStatus::Connecting(server) => format!("Connecting to {server}…"),
+                            crate::engine::ConnStatus::Failed(_) => "Connection failed".to_owned(),
+                            _ => "Not connected".to_owned(),
+                        }}}
+                        EmptyDescription {{move || match state.status.get() {
+                            crate::engine::ConnStatus::Failed(e) => e,
+                            _ => "Join a server to see its channels and who is talking.".to_owned(),
+                        }}}
+                    }
+                    EmptyContent {
+                        Button(on:click = move |_| state.modal.set(Modal::Connect)) {"Connect…"}
+                    }
                 }
             } else {
                 ScrollArea(class = "tree-scroll", label = "Server tree") {
@@ -133,15 +143,18 @@ fn ChannelRow(
                     a11y:role = Role::TreeItem,
                     a11y:label = label.clone(),
                     style:padding-left = indent(depth),
-                    on:click = move |_| state.selected.set(Selection::Channel(id)),
-                    on:double_click = move |_| state.join(id),
+                    on:click = move |_| if state.click(Selection::Channel(id)) { state.join(id) },
                     on:key_down = move |ev| match &ev.key {
                         Key::Named(NamedKey::Enter) => state.join(id),
                         Key::Named(NamedKey::ArrowLeft) if !collapsed && has_children => state.toggle_collapsed(id),
                         Key::Named(NamedKey::ArrowRight) if collapsed => state.toggle_collapsed(id),
                         _ => {}
                     },
-                    on:pointer_enter = move |_| if dragging() { state.drop_target.set(Some(id)) },
+                    on:pointer_enter = move |_| {
+                        if state.drag.with_untracked(|d| d.as_ref().is_some_and(|d| d.active)) {
+                            state.drop_target.set(Some(id));
+                        }
+                    },
                     on:pointer_leave = move |_| if state.drop_target.get_untracked() == Some(id) { state.drop_target.set(None) }
                 ) {
                     if move || has_children {
@@ -162,7 +175,7 @@ fn ChannelRow(
                         Ico(svg = icons::HOME, class = "flag flag-home")
                     }
                     if move || count > 0 {
-                        text(class = "node-count") {{count.to_string()}}
+                        Badge(variant = BadgeVariant::Secondary, class = "node-badge") {{count.to_string()}}
                     }
                 }
             }
@@ -196,6 +209,15 @@ fn ClientRow(
     let talking = move || state.talking.with(|t| t.contains(&id));
     let locally_muted = move || state.local_mutes.with(|m| m.contains(&id));
     let lit = Signal::derive(move || talking() && !locally_muted());
+    // A press that started here and has not become a drag dies with this row.
+    on_cleanup_local(move || {
+        if state
+            .drag
+            .with_untracked(|d| d.as_ref().is_some_and(|d| d.client == id && !d.active))
+        {
+            state.drag.set(None);
+        }
+    });
     let label = name.clone();
     let drag_name = name.clone();
     let display = name.clone();
@@ -247,8 +269,7 @@ fn ClientRow(
                     a11y:role = Role::TreeItem,
                     a11y:label = label.clone(),
                     style:padding-left = indent(depth),
-                    on:click = move |_| state.selected.set(Selection::Client(id)),
-                    on:double_click = move |_| state.open_private(id),
+                    on:click = move |_| if state.click(Selection::Client(id)) && !me { state.open_private(id) },
                     on:pointer_down = move |ev| {
                         if ev.button == Some(PointerButton::Primary) {
                             state.drag.set(Some(Drag {
@@ -260,16 +281,16 @@ fn ClientRow(
                         }
                     }
                 ) {
-                    Avatar(name = display.clone(), talking = lit, dim = away)
+                    UserAvatar(name = display.clone(), talking = lit, dim = away)
                     text(class = "node-name") {{display.clone()}}
                     if move || away {
-                        text(class = "node-away") {"away"}
+                        Badge(variant = BadgeVariant::Outline, class = "node-badge") {"away"}
                     }
                     if move || me {
-                        text(class = "node-you") {"you"}
+                        Badge(variant = BadgeVariant::Secondary, class = "node-badge") {"you"}
                     }
                     if move || sharing {
-                        text(class = "node-live") {"LIVE"}
+                        Badge(variant = BadgeVariant::Destructive, class = "node-badge") {"LIVE"}
                     }
                     spacer()
                     if move || muted {

@@ -2,6 +2,7 @@
 //! lights while the client talks.
 
 use zgui::prelude::*;
+use zgui_ui::prelude::*;
 
 const PALETTE: [&str; 10] = [
     "#e5484d", "#f76b15", "#ffc53d", "#46a758", "#12a594", "#0090ff", "#3e63dd", "#8e4ec6",
@@ -24,25 +25,27 @@ fn initial(name: &str) -> String {
         .unwrap_or_else(|| "?".into())
 }
 
+/// A zgui-ui avatar showing the client's initial on a colour derived from the name, with a ring
+/// that lights while the client talks.
 #[component]
-pub fn Avatar(
+pub fn UserAvatar(
     #[prop(into)] name: String,
     /// Whether the ring is lit.
     #[prop(into)]
     talking: Signal<bool>,
     #[prop(default = false)] dim: bool,
-    #[prop(default = "sm")] size: &'static str,
+    #[prop(default = AvatarSize::Sm)] size: AvatarSize,
 ) -> impl IntoView {
     let color = color_of(&name);
+    let letter = initial(&name);
     view! {
-        box(
-            class = format!("avatar avatar-{size}"),
+        Avatar(
+            size = size,
+            class = "user-avatar",
             class:talking = move || talking.get(),
-            class:dim = dim,
-            style:background-color = Some(color.to_owned()),
-            a11y:hidden = true
+            class:dim = dim
         ) {
-            text(class = "avatar-initial") {{initial(&name)}}
+            AvatarFallback(class = "user-avatar-fallback", style:background-color = Some(color.to_owned())) {{letter.clone()}}
         }
     }
 }
