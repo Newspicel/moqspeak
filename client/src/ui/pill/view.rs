@@ -6,6 +6,7 @@ use zgui::prelude::*;
 use zgui_ui_primitives::Placement;
 
 use crate::audio::VoiceMode;
+use crate::screen;
 use crate::ui::parts::KeyProps;
 use crate::ui::parts::icons;
 use crate::ui::pill::self_menu::SelfMenuProps;
@@ -56,15 +57,17 @@ pub fn Pill() -> impl IntoView {
                     TalkKey()
                 }
                 box(class = "ms-pill__sep")
-                Key(
-                    svg = Signal::derive_local(move || if state.sharing.get() { icons::SCREEN_SHARE_OFF } else { icons::SCREEN_SHARE }),
-                    label = Signal::derive_local(move || if state.sharing.get() { "Stop sharing" } else { "Share screen" }.to_owned()),
-                    on = Signal::derive_local(move || state.sharing.get()),
-                    disabled = Signal::derive_local(move || !state.connected()),
-                    tone = "err",
-                    placement = Placement::TOP,
-                    on_press = share
-                )
+                if move || screen::ENABLED {
+                    Key(
+                        svg = Signal::derive_local(move || if state.sharing.get() { icons::SCREEN_SHARE_OFF } else { icons::SCREEN_SHARE }),
+                        label = Signal::derive_local(move || if state.sharing.get() { "Stop sharing" } else { "Share screen" }.to_owned()),
+                        on = Signal::derive_local(move || state.sharing.get()),
+                        disabled = Signal::derive_local(move || !state.connected()),
+                        tone = "err",
+                        placement = Placement::TOP,
+                        on_press = share.clone()
+                    )
+                }
                 Key(
                     svg = Signal::stored_local(icons::SETTINGS),
                     label = label("Settings"),

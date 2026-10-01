@@ -6,6 +6,7 @@ use zgui::reactive::{LocalStorage, UnsyncCallback};
 use zgui_ui::prelude::*;
 
 use crate::model::{ClientId, ClientMsg, Role};
+use crate::screen;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{Erase, act};
 use crate::ui::screen::pop_out;
@@ -120,7 +121,7 @@ pub fn ClientMenu(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                 Icon(svg = icons::HAND, size = IconSize::Sm)
                 text {"Poke…"}
             }
-            if move || row.with(|r| r.sharing) {
+            if move || screen::ENABLED && row.with(|r| r.sharing) {
                 MenuItem(on_select = act(move || pop_out(state, id, row.with_untracked(|r| r.name.clone())))) {
                     Icon(svg = icons::MONITOR_PLAY, size = IconSize::Sm)
                     text {"Watch screen"}

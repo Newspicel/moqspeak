@@ -13,6 +13,9 @@ mod obu;
 pub use decode::Decoder;
 pub use encode::{Sharer, list_monitors};
 
+/// Whether the window offers to share or watch a screen.
+pub const ENABLED: bool = false;
+
 /// One encoded video frame and how to place it.
 #[derive(Clone, Debug)]
 pub struct VideoFrame {
