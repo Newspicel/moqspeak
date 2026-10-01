@@ -3,6 +3,8 @@ name = "moqspeak"
 version = "0.1.0"
 edition = "2024"
 description = "A TeamSpeak-style voice client built on zgui and Media over QUIC"
+license = "ISC"
+repository = "https://github.com/Newspicel/moqspeak"
 
 [dependencies]
 zgui = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
@@ -30,3 +32,7 @@ rav1e = { version = "0.8", default-features = false, features = ["threading", "a
 rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8"] }
 nnnoiseless = { version = "0.5", default-features = false }
 earshot = "1"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"

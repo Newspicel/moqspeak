@@ -61,14 +61,40 @@ macOS).
 The build needs the nightly toolchain pinned in `rust-toolchain.toml` (zgui requires it), plus
 `cmake` and `nasm`. libopus and the AV1 assembly are built from source.
 
+## Build the macOS app
+
+```sh
+cargo build -p moqspeak --release
+packaging/macos/bundle.sh            # writes dist/moqspeak.app, signed ad hoc
+cp -R dist/moqspeak.app /Applications/
+```
+
+`packaging/icon/build.sh` regenerates the icons from `packaging/icon/moqspeak.svg`.
+
 ## Releases
 
 `.github/workflows/build.yml` builds and tests on Linux, macOS (arm64) and Windows for every
 push. Push a `v*` tag to publish a GitHub release with:
 
 * `moqspeak-linux-x86_64.tar.gz`
-* `moqspeak-macos-arm64.zip` (an ad-hoc signed `moqspeak.app`)
+* `moqspeak-macos-arm64.dmg` and `.zip`. With the secrets below, these are signed with your
+  Developer ID and notarized. Without them they are signed ad hoc.
 * `moqspeak-windows-x86_64.zip`
+
+### macOS signing and notarization
+
+Set these repository secrets (Settings → Secrets and variables → Actions):
+
+| Secret | What it is |
+|---|---|
+| `MACOS_CERTIFICATE` | Your **Developer ID Application** certificate and private key, exported from Keychain Access as `.p12`, then `base64 -i cert.p12 \| pbcopy` |
+| `MACOS_CERTIFICATE_PASSWORD` | The password you gave the `.p12` export |
+| `APPLE_API_KEY` | An App Store Connect API key (`AuthKey_XXXX.p8`, role *Developer*), base64-encoded |
+| `APPLE_API_KEY_ID` | That key's ID |
+| `APPLE_API_ISSUER_ID` | The issuer ID shown above the key list in App Store Connect → Users and Access → Integrations |
+
+The workflow finds the signing identity in the certificate, signs with the hardened runtime and
+the microphone entitlement, and notarizes and staples both the app and the DMG.
 
 ## Layout
 
@@ -106,4 +132,6 @@ the URL path. The relay ID is only used in the API.
 * The screen viewer shows a keyframe within two seconds of joining, and the AV1 encoder adds
   about four frames of latency.
 
-Icons: [Lucide](https://lucide.dev), ISC licence (`client/assets/icons/LICENSE`).
+## Licence
+
+ISC, see `LICENSE`. Icons: [Lucide](https://lucide.dev), ISC licence (`client/assets/icons/LICENSE`).

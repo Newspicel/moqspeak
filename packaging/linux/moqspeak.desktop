@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=moqspeak
+Comment=Voice chat over Media over QUIC
+Exec=moqspeak
+Icon=moqspeak
+Terminal=false
+Categories=Network;Chat;AudioVideo;

@@ -1,5 +1,8 @@
 //! moqspeak: a TeamSpeak 3 style voice client on zgui and Media over QUIC.
 
+// A release build on Windows is a GUI program with no console window.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod audio;
 mod bot;
 mod engine;
@@ -14,6 +17,16 @@ use zgui_ui_tokens::prelude::*;
 use crate::engine::Engine;
 use crate::ui::AppState;
 use crate::ui::shell::ShellProps;
+
+/// The window icon, decoded from the PNG the build embeds.
+fn window_icon() -> WindowIcon {
+    let png = include_bytes!("../../packaging/icon/moqspeak-256.png");
+    let image = image::load_from_memory_with_format(png, image::ImageFormat::Png)
+        .expect("embedded icon is a valid PNG")
+        .into_rgba8();
+    let (w, h) = image.dimensions();
+    WindowIcon::from_rgba(image.into_raw(), w, h).expect("icon size matches its pixels")
+}
 
 fn main() -> Result<(), zgui::Error> {
     tracing_subscriber::fmt()
@@ -43,6 +56,7 @@ fn main() -> Result<(), zgui::Error> {
         .with_title("moqspeak")
         .with_size(1100.0, 760.0)
         .with_min_size(720.0, 480.0)
+        .with_icon(window_icon())
         .with_stylesheet(ui::SHEET)
         .run(move || {
             let (engine, mut events) = boot.take().expect("one main window");

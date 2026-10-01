@@ -30,6 +30,8 @@ jobs:
           - name: windows-x86_64
             os: windows-latest
             exe: moqspeak.exe
+    env:
+      MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
     defaults:
       run:
         shell: bash
@@ -73,26 +75,67 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           mkdir -p dist/moqspeak
-          cp target/release/moqspeak README.md dist/moqspeak/
+          cp target/release/moqspeak README.md LICENSE dist/moqspeak/
           cp client/assets/icons/LICENSE dist/moqspeak/LICENSE-lucide
+          cp packaging/icon/moqspeak-512.png dist/moqspeak/moqspeak.png
+          cp packaging/linux/moqspeak.desktop dist/moqspeak/
           tar -C dist -czf dist/moqspeak-${{ matrix.name }}.tar.gz moqspeak
+
+      # Signing and notarization run when the Apple secrets are set; otherwise the app is signed
+      # ad hoc and Gatekeeper asks the user to approve it on first launch.
+      - name: import signing certificate (macos)
+        if: runner.os == 'macOS' && env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE: ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN=$RUNNER_TEMP/signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -hex 16)
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          echo "$MACOS_CERTIFICATE" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$MACOS_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          rm "$RUNNER_TEMP/cert.p12"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN" | grep "Developer ID Application" | head -1 | sed -E 's/.*"(.*)"/\1/')
+          test -n "$IDENTITY" || { echo "no Developer ID Application identity in the certificate"; exit 1; }
+          echo "MACOS_SIGNING_IDENTITY=$IDENTITY" >> "$GITHUB_ENV"
 
       - name: package (macos)
         if: runner.os == 'macOS'
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
         run: |
-          APP=dist/moqspeak.app
-          mkdir -p $APP/Contents/MacOS $APP/Contents/Resources
-          cp target/release/moqspeak $APP/Contents/MacOS/moqspeak
-          VERSION=$(grep -m1 '^version' client/Cargo.toml | cut -d'"' -f2)
-          sed "s/__VERSION__/$VERSION/g" packaging/macos/Info.plist > $APP/Contents/Info.plist
-          codesign --force --deep --sign - $APP
-          cd dist && ditto -c -k --keepParent moqspeak.app moqspeak-${{ matrix.name }}.zip
+          packaging/macos/bundle.sh target/release/moqspeak
+          DMG=dist/moqspeak-${{ matrix.name }}.dmg
+          if [ -n "$MACOS_SIGNING_IDENTITY" ] && [ -n "$APPLE_API_KEY" ]; then
+            echo "$APPLE_API_KEY" | base64 --decode > "$RUNNER_TEMP/AuthKey.p8"
+            notarize() {
+              xcrun notarytool submit "$1" --key "$RUNNER_TEMP/AuthKey.p8" \
+                --key-id "$APPLE_API_KEY_ID" --issuer "$APPLE_API_ISSUER_ID" --wait --timeout 30m
+            }
+            ditto -c -k --keepParent dist/moqspeak.app "$RUNNER_TEMP/app.zip"
+            notarize "$RUNNER_TEMP/app.zip"
+            xcrun stapler staple dist/moqspeak.app
+          fi
+          hdiutil create -volname moqspeak -srcfolder dist/moqspeak.app -ov -format UDZO "$DMG"
+          if [ -n "$MACOS_SIGNING_IDENTITY" ] && [ -n "$APPLE_API_KEY" ]; then
+            codesign --force --timestamp --sign "$MACOS_SIGNING_IDENTITY" "$DMG"
+            notarize "$DMG"
+            xcrun stapler staple "$DMG"
+            rm "$RUNNER_TEMP/AuthKey.p8"
+          fi
+          (cd dist && ditto -c -k --keepParent moqspeak.app moqspeak-${{ matrix.name }}.zip)
 
       - name: package (windows)
         if: runner.os == 'Windows'
         run: |
           mkdir -p dist/moqspeak
-          cp target/release/moqspeak.exe README.md dist/moqspeak/
+          cp target/release/moqspeak.exe README.md LICENSE dist/moqspeak/
           cp client/assets/icons/LICENSE dist/moqspeak/LICENSE-lucide
           cd dist && 7z a moqspeak-${{ matrix.name }}.zip moqspeak
 
@@ -102,6 +145,7 @@ jobs:
           path: |
             dist/*.tar.gz
             dist/*.zip
+            dist/*.dmg
 
   release:
     if: startsWith(github.ref, 'refs/tags/v')
