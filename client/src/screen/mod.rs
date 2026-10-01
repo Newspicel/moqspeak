@@ -13,8 +13,8 @@ mod obu;
 pub use decode::Decoder;
 pub use encode::{Sharer, list_monitors};
 
-/// Whether the window offers to share or watch a screen.
-pub const ENABLED: bool = false;
+/// Whether the window offers to share or watch a screen. The `screen-share` feature turns it on.
+pub const ENABLED: bool = cfg!(feature = "screen-share");
 
 /// One encoded video frame and how to place it.
 #[derive(Clone, Debug)]

@@ -6,6 +6,10 @@ description = "A TeamSpeak-style voice client built on zgui and Media over QUIC"
 license = "ISC"
 repository = "https://github.com/Newspicel/moqspeak"
 
+[features]
+# Offers to share and watch screens.
+screen-share = []
+
 [dependencies]
 zgui = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
 zgui-ui = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }

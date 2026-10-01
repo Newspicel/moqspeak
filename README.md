@@ -100,7 +100,11 @@ assembly are built from source.
 ```sh
 cargo run -p moqspeak --release                                    # start the app
 cargo run -p moqspeak --release -- moq.newspicel.dev/demo Ada     # connect at start
+cargo run -p moqspeak --release --features screen-share            # with screen sharing
 ```
+
+Screen sharing is off by default. The `screen-share` feature adds the share key and the
+"Watch screen" item.
 
 To build and install the macOS app bundle:
 
