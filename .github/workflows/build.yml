@@ -9,6 +9,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  MACOSX_DEPLOYMENT_TARGET: "14.0"
 
 permissions:
   contents: write
@@ -25,7 +26,8 @@ jobs:
             os: ubuntu-24.04
             exe: moqspeak
           - name: macos-arm64
-            os: macos-14
+            # The ScreenCaptureKit bridge needs the macOS 15 SDK; the app itself runs on 14+.
+            os: macos-15
             exe: moqspeak
           - name: windows-x86_64
             os: windows-latest
