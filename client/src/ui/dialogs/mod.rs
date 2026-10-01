@@ -1,10 +1,11 @@
-//! The dialogs: connect, new channel, poke and the display picker.
+//! The dialogs: connect, new channel and poke.
 
 mod all;
 mod connect;
 mod create_channel;
 mod host;
 mod poke;
-mod share;
 
 pub use crate::ui::dialogs::all::DialogsProps;
+#[cfg(feature = "screen-share")]
+pub use crate::ui::dialogs::host::ModalHostProps;

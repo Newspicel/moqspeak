@@ -16,17 +16,22 @@ use tokio::task::JoinHandle;
 use crate::audio::{Mixer, Packet};
 use crate::engine::MediaStatus;
 use crate::model::ClientId;
+#[cfg(feature = "screen-share")]
 use crate::screen::VideoFrame;
 
 /// The track every broadcast carries its voice on.
 pub const AUDIO_TRACK: &str = "audio";
 /// The track a shared screen travels on: AV1, a group per keyframe.
+#[cfg(feature = "screen-share")]
 pub const SCREEN_TRACK: &str = "screen";
 
 enum Op {
     Publish(Packet),
+    #[cfg(feature = "screen-share")]
     Video(VideoFrame),
+    #[cfg(feature = "screen-share")]
     Watch(u64, String, std::sync::mpsc::Sender<VideoFrame>),
+    #[cfg(feature = "screen-share")]
     Unwatch(u64),
     Subscribe(ClientId, String),
     Unsubscribe(ClientId),
@@ -63,15 +68,18 @@ impl MediaSession {
         let _ = self.ops.send(Op::Publish(packet));
     }
 
+    #[cfg(feature = "screen-share")]
     pub fn publish_video(&self, frame: VideoFrame) {
         let _ = self.ops.send(Op::Video(frame));
     }
 
     /// Starts receiving `path`'s screen into `sink`, as viewer `id`.
+    #[cfg(feature = "screen-share")]
     pub fn watch(&self, id: u64, path: String, sink: std::sync::mpsc::Sender<VideoFrame>) {
         let _ = self.ops.send(Op::Watch(id, path, sink));
     }
 
+    #[cfg(feature = "screen-share")]
     pub fn unwatch(&self, id: u64) {
         let _ = self.ops.send(Op::Unwatch(id));
     }
@@ -148,7 +156,9 @@ async fn run(
     let pub_origin = moq_tokio::origin::spawn();
     let producer = pub_origin.create_broadcast(broadcast.as_str())?;
     let mut track = producer.create_track(AUDIO_TRACK, None)?;
+    #[cfg(feature = "screen-share")]
     let screen = producer.create_track(SCREEN_TRACK, None)?;
+    #[cfg(feature = "screen-share")]
     let mut screen_group: Option<moq_net::group::Producer> = None;
     producer.announce(Default::default())?;
 
@@ -178,6 +188,7 @@ async fn run(
 
     let consumer = sub_scoped.consume();
     let mut readers: HashMap<ClientId, JoinHandle<()>> = HashMap::new();
+    #[cfg(feature = "screen-share")]
     let mut viewers: HashMap<ClientId, JoinHandle<()>> = HashMap::new();
     let mut count = 0usize;
     let connected = |count| MediaStatus::Connected {
@@ -195,6 +206,7 @@ async fn run(
                         tracing::warn!("write audio frame: {e}");
                     }
                 }
+                #[cfg(feature = "screen-share")]
                 Some(Op::Video(frame)) => {
                     if frame.keyframe || screen_group.is_none() {
                         if let Some(old) = screen_group.take() {
@@ -212,12 +224,14 @@ async fn run(
                         }
                     }
                 }
+                #[cfg(feature = "screen-share")]
                 Some(Op::Watch(id, path, sink)) => {
                     if let Some(old) = viewers.remove(&id) {
                         old.abort();
                     }
                     viewers.insert(id, tokio::spawn(watch_peer(consumer.clone(), path, sink)));
                 }
+                #[cfg(feature = "screen-share")]
                 Some(Op::Unwatch(id)) => {
                     if let Some(old) = viewers.remove(&id) {
                         old.abort();
@@ -252,13 +266,19 @@ async fn run(
         }
     }
 
-    for (_, reader) in readers.into_iter().chain(viewers) {
+    for reader in readers.into_values() {
         reader.abort();
     }
-    if let Some(g) = screen_group.take() {
-        let _ = g.finish();
+    #[cfg(feature = "screen-share")]
+    {
+        for viewer in viewers.into_values() {
+            viewer.abort();
+        }
+        if let Some(g) = screen_group.take() {
+            let _ = g.finish();
+        }
+        let _ = screen.finish();
     }
-    let _ = screen.finish();
     let _ = track.finish();
     producer.close();
     Ok(())
@@ -281,6 +301,7 @@ fn report(
 }
 
 /// Feeds one remote screen into `sink` until aborted or the viewer goes away.
+#[cfg(feature = "screen-share")]
 async fn watch_peer(
     consumer: moq_net::origin::Consumer,
     path: String,

@@ -8,6 +8,7 @@ use zgui_ui::prelude::*;
 use crate::model::{ClientId, Role as Rank};
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{StatusDotProps, TagProps};
+use crate::ui::screen::LiveTagProps;
 use crate::ui::state::{AppState, ClientRow, Drag, Selection};
 use crate::ui::tree::client_menu::ClientMenuProps;
 use crate::ui::tree::view::{CLIENT_INSET, indent, px};
@@ -91,9 +92,7 @@ pub fn ClientLine(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                     if move || row.with(|r| r.role == Rank::Mod) {
                         Tag(text = "mod")
                     }
-                    if move || row.with(|r| r.sharing) {
-                        Tag(text = "live", tone = "err")
-                    }
+                    LiveTag(row = row)
                     box(class = "ms-row__gap")
                     row(class = "ms-row__flags") {
                         if move || row.with(|r| r.away) {

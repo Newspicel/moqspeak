@@ -127,6 +127,7 @@ impl AppState {
                 });
             }
             Event::Talking(set) => self.talking.set(set),
+            #[cfg(feature = "screen-share")]
             Event::Sharing(on) => self.sharing.set(on),
             Event::Media(status) => {
                 let was = matches!(self.media.get_untracked(), MediaStatus::Connected { .. });

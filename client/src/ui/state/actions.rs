@@ -8,7 +8,6 @@ use crate::model::{ChannelId, ChatTarget, ClientId, ClientMsg};
 use crate::ui::state::app::AppState;
 use crate::ui::state::chat::Conversation;
 use crate::ui::state::log::Tone;
-use crate::ui::state::modal::Modal;
 use crate::ui::state::note::{Level, Note};
 use crate::ui::state::pointer::Selection;
 use crate::ui::state::settings::{Bookmark, mode_to_str};
@@ -122,42 +121,6 @@ impl AppState {
             .set_value(if double { None } else { Some((target, now)) });
         self.selected.set(target);
         double
-    }
-
-    /// Starts or stops sharing. With several monitors, asks which one first.
-    pub fn toggle_share(&self) {
-        if self.sharing.get_untracked() {
-            self.send(Command::StopShare);
-            return;
-        }
-        #[cfg(target_os = "macos")]
-        if crate::screen::mac::picker_available() {
-            // The system picker chooses a window, an app or a display. Its answer arrives on
-            // another thread and comes back to this one through the UI handle.
-            let ui = ui();
-            let state = *self;
-            crate::screen::mac::pick(move |outcome| {
-                ui.post(move || match outcome {
-                    Ok(Some(picked)) => state.send(Command::StartSharePicked(
-                        crate::screen::Handoff::new(picked),
-                    )),
-                    Ok(None) => {}
-                    Err(e) => state.fail("Screen share failed", Some(format!("{e:#}"))),
-                });
-            });
-            return;
-        }
-        let monitors = crate::screen::list_monitors();
-        match monitors.len() {
-            0 => self.fail(
-                "No screen to share",
-                Some("On macOS, allow moqspeak under System Settings → Privacy & Security → Screen Recording.".into()),
-            ),
-            1 => self.send(Command::StartShare {
-                monitor: monitors[0].id,
-            }),
-            _ => self.modal.set(Modal::Share { monitors }),
-        }
     }
 
     /// Logs an error and announces it.

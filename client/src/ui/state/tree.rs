@@ -38,6 +38,7 @@ pub struct ClientRow {
     pub away: bool,
     /// Whether this is you.
     pub me: bool,
+    #[cfg(feature = "screen-share")]
     pub sharing: bool,
     pub role: Role,
 }
@@ -107,6 +108,7 @@ pub fn tree_rows(
                     deaf: c.deaf,
                     away: c.away,
                     me: Some(c.id) == cx.me,
+                    #[cfg(feature = "screen-share")]
                     sharing: c.sharing,
                     role: c.role,
                 }));

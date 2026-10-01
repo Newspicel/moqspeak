@@ -18,6 +18,7 @@ pub enum Modal {
         name: String,
     },
     /// Pick the display to share.
+    #[cfg(feature = "screen-share")]
     Share {
         monitors: Vec<crate::screen::MonitorInfo>,
     },

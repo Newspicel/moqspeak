@@ -103,8 +103,8 @@ cargo run -p moqspeak --release -- moq.newspicel.dev/demo Ada     # connect at s
 cargo run -p moqspeak --release --features screen-share            # with screen sharing
 ```
 
-Screen sharing is off by default. The `screen-share` feature adds the share key and the
-"Watch screen" item.
+Screen sharing is off by default. The `screen-share` feature builds it in: the capture, the AV1
+codec, the share key and the "Watch screen" item.
 
 To build and install the macOS app bundle:
 
@@ -115,11 +115,11 @@ cp -R dist/moqspeak.app /Applications/
 ```
 
 For testing with one machine, start a headless participant. It joins a channel, beeps every two
-seconds and prints whom it hears. With `--share-pattern` it also shares a moving test pattern.
-With `--wander` it joins the next channel every few seconds.
+seconds and prints whom it hears. With `--share-pattern` it also shares a moving test pattern, in
+a build with the `screen-share` feature. With `--wander` it joins the next channel every few seconds.
 
 ```sh
-cargo run -p moqspeak -- --bot moq.newspicel.dev/demo BeepBot Lobby --share-pattern
+cargo run -p moqspeak --features screen-share -- --bot moq.newspicel.dev/demo BeepBot Lobby --share-pattern
 ```
 
 ## Hosting your own server

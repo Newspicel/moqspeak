@@ -1,7 +1,8 @@
 //! A headless participant for testing: `moqspeak --bot <address> <nickname> [channel]`.
 //!
 //! It joins the server, moves to the named channel, beeps a short tone every two seconds over
-//! MoQ, and prints who it hears. With `--share-pattern` it also shares a moving test pattern.
+//! MoQ, and prints who it hears. With `--share-pattern` it also shares a moving test pattern, in a build
+//! with the `screen-share` feature.
 //! With `--wander` it joins the next channel every few seconds.
 
 use std::f32::consts::TAU;
@@ -20,6 +21,7 @@ pub fn run(args: &[String]) {
         .unwrap_or_else(|| crate::ui::state::DEFAULT_ADDRESS.into());
     let nickname = args.get(1).cloned().unwrap_or_else(|| "BeepBot".into());
     let channel = args.get(2).filter(|a| !a.starts_with("--")).cloned();
+    #[cfg(feature = "screen-share")]
     let share = args.iter().any(|a| a == "--share-pattern");
     let wander = args.iter().any(|a| a == "--wander");
 
@@ -88,10 +90,9 @@ pub fn run(args: &[String]) {
                     names.insert(c.id, c.name.clone());
                 }
                 rooms = channels.iter().map(|c| c.id).collect();
+                #[cfg(feature = "screen-share")]
                 if !joined && share {
-                    engine.send(Command::StartShare {
-                        monitor: crate::engine::TEST_PATTERN,
-                    });
+                    engine.send(Command::StartShare(crate::screen::Source::TestPattern));
                 }
                 if !joined {
                     if let Some(wanted) = &channel {

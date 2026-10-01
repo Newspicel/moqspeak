@@ -6,9 +6,10 @@ use zgui::reactive::LocalStorage;
 
 /// Declares one constant per icon. Each is a Lucide SVG drawn with `currentColor`.
 macro_rules! icons {
-    ($($name:ident => $file:literal,)*) => {
+    ($($(#[$meta:meta])* $name:ident => $file:literal,)*) => {
         $(
             #[doc = concat!("The `", $file, "` icon.")]
+            $(#[$meta])*
             pub const $name: &str = include_str!(concat!("../../../assets/icons/", $file, ".svg"));
         )*
     };
@@ -38,12 +39,16 @@ icons! {
     MIC => "mic",
     MIC_OFF => "mic-off",
     MINUS => "minus",
+    #[cfg(feature = "screen-share")]
     MONITOR => "monitor",
+    #[cfg(feature = "screen-share")]
     MONITOR_PLAY => "monitor-play",
     MOON => "moon",
     PALETTE => "palette",
     PLUG => "plug",
+    #[cfg(feature = "screen-share")]
     SCREEN_SHARE => "screen-share",
+    #[cfg(feature = "screen-share")]
     SCREEN_SHARE_OFF => "screen-share-off",
     SCROLL_TEXT => "scroll-text",
     SEND_HORIZONTAL => "send-horizontal",

@@ -16,30 +16,9 @@ use crate::audio::{Audio, Packet};
 use crate::identity::Identity;
 use crate::media::MediaSession;
 use crate::model::{Channel, ChatTarget, Client, ClientId, ClientMsg, ServerInfo, ServerMsg};
-use crate::screen::{Handoff, Sharer, VideoFrame};
-
-/// What the system picker chose. Only macOS has one; elsewhere this is never constructed.
-#[cfg(target_os = "macos")]
-pub type Picked = crate::screen::mac::Picked;
-#[cfg(not(target_os = "macos"))]
-#[derive(Debug)]
-pub enum Picked {}
-
-#[cfg(target_os = "macos")]
-fn start_picked(
-    picked: Handoff<Picked>,
-    sink: impl Fn(VideoFrame) + Send + 'static,
-) -> Result<Sharer> {
-    let picked = picked
-        .take()
-        .ok_or_else(|| anyhow!("that choice was already used"))?;
-    crate::screen::mac::start(picked, sink)
-}
-
-#[cfg(not(target_os = "macos"))]
-fn start_picked(_: Handoff<Picked>, _: impl Fn(VideoFrame) + Send + 'static) -> Result<Sharer> {
-    Err(anyhow!("there is no system picker on this platform"))
-}
+use crate::screen::Share;
+#[cfg(feature = "screen-share")]
+use crate::screen::{ShareEvent, Source, VideoFrame};
 
 /// Where the client is in connecting to a server.
 #[derive(Clone, Debug, PartialEq)]
@@ -82,6 +61,7 @@ pub enum Event {
     Talking(BTreeSet<ClientId>),
     Media(MediaStatus),
     /// Whether this client is sharing its screen right now.
+    #[cfg(feature = "screen-share")]
     Sharing(bool),
 }
 
@@ -93,9 +73,6 @@ pub enum MediaStatus {
     Failed(String),
 }
 
-/// The monitor id that shares a synthetic test pattern instead of a real screen.
-pub const TEST_PATTERN: u32 = u32::MAX;
-
 /// What the UI asks the network to do.
 #[derive(Clone, Debug)]
 pub enum Command {
@@ -105,24 +82,20 @@ pub enum Command {
     },
     Disconnect,
     Send(ClientMsg),
-    /// Shares monitor `id`, replacing any running share.
-    StartShare {
-        monitor: u32,
-    },
-    /// Shares what the user chose in the system picker.
-    #[cfg_attr(
-        not(target_os = "macos"),
-        expect(dead_code, reason = "only the macOS system picker shares this way")
-    )]
-    StartSharePicked(Handoff<Picked>),
+    /// Shares `source` and replaces any running share.
+    #[cfg(feature = "screen-share")]
+    StartShare(Source),
+    #[cfg(feature = "screen-share")]
     StopShare,
     /// Streams `client`'s screen into `sink` until [`Command::Unwatch`] names the same `view`.
     /// Each viewer has its own `view`, so two views of one screen do not end each other.
+    #[cfg(feature = "screen-share")]
     Watch {
         client: ClientId,
         view: u64,
         sink: std::sync::mpsc::Sender<VideoFrame>,
     },
+    #[cfg(feature = "screen-share")]
     Unwatch {
         view: u64,
     },
@@ -317,7 +290,8 @@ async fn run(
                 let _ = events.send(Event::Media(MediaStatus::Off));
                 let _ = events.send(Event::Talking(BTreeSet::new()));
             }
-            Command::StartShare { .. } => {
+            #[cfg(feature = "screen-share")]
+            Command::StartShare(_) => {
                 let _ = events.send(Event::Log {
                     error: true,
                     text: "Connect to a server before sharing your screen".into(),
@@ -383,8 +357,7 @@ async fn session(
     let mut tick = tokio::time::interval(Duration::from_millis(60));
     let mut keepalive = tokio::time::interval(Duration::from_secs(20));
     let mut last_clients: Vec<Client> = Vec::new();
-    let mut sharer: Option<Sharer> = None;
-    let (video_tx, mut video_rx) = unbounded_channel::<VideoFrame>();
+    let mut share = Share::default();
 
     let result = loop {
         tokio::select! {
@@ -449,54 +422,47 @@ async fn session(
                         break Err(anyhow!("connection lost: {e}"));
                     }
                 }
-                Some(cmd @ (Command::StartShare { .. } | Command::StartSharePicked(_))) => {
-                    sharer = None;
-                    let tx = video_tx.clone();
-                    let sink = move |frame| { let _ = tx.send(frame); };
-                    let started = match cmd {
-                        Command::StartShare { monitor } if monitor == TEST_PATTERN => Sharer::test_pattern(sink),
-                        Command::StartShare { monitor } => Sharer::start(monitor, sink),
-                        Command::StartSharePicked(picked) => start_picked(picked, sink),
-                        _ => unreachable!(),
-                    };
-                    match started {
-                        Ok(s) => {
-                            sharer = Some(s);
-                            let _ = events.send(Event::Sharing(true));
-                            let _ = events.send(Event::Log { error: false, text: "You are now sharing your screen".into() });
-                            let msg = ClientMsg::Sharing { sharing: true };
-                            let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
-                        }
-                        Err(e) => {
-                            let _ = events.send(Event::Log { error: true, text: format!("Screen sharing failed: {e:#}") });
-                        }
+                #[cfg(feature = "screen-share")]
+                Some(Command::StartShare(source)) => match share.start(source) {
+                    Ok(()) => {
+                        let _ = ws_tx.send(Message::text(shared(true, events))).await;
                     }
-                }
+                    Err(e) => {
+                        let _ = events.send(Event::Log { error: true, text: format!("Screen sharing failed: {e:#}") });
+                    }
+                },
+                #[cfg(feature = "screen-share")]
                 Some(Command::StopShare) => {
-                    if sharer.take().is_some() {
-                        let _ = events.send(Event::Sharing(false));
-                        let _ = events.send(Event::Log { error: false, text: "Screen sharing stopped".into() });
-                        let msg = ClientMsg::Sharing { sharing: false };
-                        let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
+                    if share.stop() {
+                        let _ = ws_tx.send(Message::text(shared(false, events))).await;
                     }
                 }
+                #[cfg(feature = "screen-share")]
                 Some(Command::Watch { client, view, sink }) => {
                     let path = last_clients.iter().find(|c| c.id == client).map(|c| c.broadcast.clone());
                     if let (Some(path), Some(session)) = (path, &media) {
                         session.watch(view, path, sink);
                     }
                 }
+                #[cfg(feature = "screen-share")]
                 Some(Command::Unwatch { view }) => {
                     if let Some(session) = &media {
                         session.unwatch(view);
                     }
                 }
             },
-            Some(frame) = video_rx.recv() => {
-                if let Some(session) = &media {
-                    session.publish_video(frame);
+            event = share.next() => match event {
+                #[cfg(feature = "screen-share")]
+                ShareEvent::Frame(frame) => {
+                    if let Some(session) = &media {
+                        session.publish_video(frame);
+                    }
                 }
-            }
+                #[cfg(feature = "screen-share")]
+                ShareEvent::Ended => {
+                    let _ = ws_tx.send(Message::text(shared(false, events))).await;
+                }
+            },
             Some(packet) = packets.recv() => {
                 if let Some(session) = &media {
                     session.publish(packet);
@@ -515,14 +481,6 @@ async fn session(
                 let _ = events.send(Event::Media(status));
             }
             _ = tick.tick() => {
-                // The system can end a capture by itself, as macOS does from its menu bar.
-                if sharer.as_ref().is_some_and(Sharer::ended) {
-                    sharer = None;
-                    let _ = events.send(Event::Sharing(false));
-                    let _ = events.send(Event::Log { error: false, text: "Screen sharing stopped".into() });
-                    let msg = ClientMsg::Sharing { sharing: false };
-                    let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
-                }
                 let mut now: BTreeSet<ClientId> =
                     audio.mixer.talking(Duration::from_millis(250)).into_iter().collect();
                 now.remove(&crate::audio::LOOPBACK_PEER);
@@ -545,7 +503,8 @@ async fn session(
     for id in subscribed.keys() {
         audio.mixer.remove(*id);
     }
-    if sharer.take().is_some() {
+    #[cfg(feature = "screen-share")]
+    if share.stop() {
         let _ = events.send(Event::Sharing(false));
     }
     if let Some(session) = media {
@@ -560,6 +519,22 @@ async fn session(
     }
     // A lost connection is an error, so the caller can reconnect.
     result
+}
+
+/// Tells the UI that sharing turned `on`, and returns the message that tells the server.
+#[cfg(feature = "screen-share")]
+fn shared(on: bool, events: &UnboundedSender<Event>) -> String {
+    let _ = events.send(Event::Sharing(on));
+    let text = if on {
+        "You are now sharing your screen"
+    } else {
+        "Screen sharing stopped"
+    };
+    let _ = events.send(Event::Log {
+        error: false,
+        text: text.into(),
+    });
+    serde_json::to_string(&ClientMsg::Sharing { sharing: on }).unwrap_or_default()
 }
 
 /// Listens to every other client in my channel, and to nobody else.

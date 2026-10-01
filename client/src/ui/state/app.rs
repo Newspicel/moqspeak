@@ -45,6 +45,7 @@ pub struct AppState {
     pub voice_mode: RwSignal<VoiceMode>,
     pub scheme: RwSignal<Scheme>,
     pub variant: RwSignal<Variant>,
+    #[cfg(feature = "screen-share")]
     pub sharing: RwSignal<bool>,
     /// How wide the chat column stands open, in CSS pixels.
     pub chat_width: RwSignal<f32>,
@@ -55,6 +56,7 @@ pub struct AppState {
     pub(super) last_click: StoredValue<Option<(Selection, std::time::Instant)>>,
     /// The application root's owner. A window opened from deep inside the tree opens under it,
     /// because a window's handle state belongs to the owner `open` runs in.
+    #[cfg(feature = "screen-share")]
     pub root: StoredValue<zgui::reactive::Owner>,
     pub ptt: RwSignal<bool>,
     pub local_mutes: RwSignal<BTreeSet<ClientId>>,
@@ -104,6 +106,7 @@ impl AppState {
             away: RwSignal::new(false),
             loopback: RwSignal::new(false),
             voice_mode: RwSignal::new(mode),
+            #[cfg(feature = "screen-share")]
             sharing: RwSignal::new(false),
             chat_width: RwSignal::new(chat_width),
             drag: RwSignal::new(None),
@@ -111,6 +114,7 @@ impl AppState {
             pointer: RwSignal::new((0.0, 0.0)),
             collapsed: RwSignal::new(BTreeSet::new()),
             last_click: StoredValue::new(None),
+            #[cfg(feature = "screen-share")]
             root: StoredValue::new(
                 zgui::reactive::Owner::current()
                     .expect("AppState is created inside the app's root owner"),

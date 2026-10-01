@@ -5,7 +5,7 @@ use zgui::reactive::StoredValue;
 use zgui_ui::prelude::*;
 
 use crate::engine::Command;
-use crate::screen::MonitorInfo;
+use crate::screen::{MonitorInfo, Source};
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::state::{AppState, Modal};
 
@@ -30,7 +30,7 @@ pub fn ShareBody() -> impl IntoView {
                     a11y:role = Role::Button,
                     a11y:label = m.name.clone(),
                     on:click = move |_| {
-                        state.send(Command::StartShare { monitor: m.id });
+                        state.send(Command::StartShare(Source::Monitor(m.id)));
                         state.modal.set(Modal::None);
                     }
                 ) {

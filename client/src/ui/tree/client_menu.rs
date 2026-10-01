@@ -6,10 +6,9 @@ use zgui::reactive::{LocalStorage, UnsyncCallback};
 use zgui_ui::prelude::*;
 
 use crate::model::{ClientId, ClientMsg, Role};
-use crate::screen;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{Erase, act};
-use crate::ui::screen::pop_out;
+use crate::ui::screen::WatchItemProps;
 use crate::ui::state::{AppState, ClientRow, Modal};
 
 /// How long ago a millisecond timestamp was, in its largest unit.
@@ -121,12 +120,7 @@ pub fn ClientMenu(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                 Icon(svg = icons::HAND, size = IconSize::Sm)
                 text {"Poke…"}
             }
-            if move || screen::ENABLED && row.with(|r| r.sharing) {
-                MenuItem(on_select = act(move || pop_out(state, id, row.with_untracked(|r| r.name.clone())))) {
-                    Icon(svg = icons::MONITOR_PLAY, size = IconSize::Sm)
-                    text {"Watch screen"}
-                }
-            }
+            WatchItem(id = id, row = row)
             MenuItem(on_select = act(move || state.set_local_mute(id, !locally_muted()))) {
                 Icon(svg = Signal::derive_local(move || if locally_muted() { icons::VOLUME_2 } else { icons::VOLUME_X }), size = IconSize::Sm)
                 text {{move || if locally_muted() { "Unmute for me" } else { "Mute for me" }}}
