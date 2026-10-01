@@ -34,7 +34,11 @@ Cloudflare Worker runs the channels, presence and chat.
 * **Devices.** Pick the microphone and speakers in Options, or follow the system default. They
   switch live.
 * **Screen sharing.**
-  * Captured with [xcap](https://crates.io/crates/xcap) at 15 fps and up to 1600 px wide.
+  * On macOS, Apple's own picker chooses a window, an app or a display, and ScreenCaptureKit
+    captures it ([screencapturekit](https://crates.io/crates/screencapturekit)). Stopping from
+    the menu bar ends the share.
+  * On Linux and Windows, a display is captured with [xcap](https://crates.io/crates/xcap).
+  * Both run at 15 fps and up to 1600 px wide.
   * Encoded to AV1 with [rav1e](https://crates.io/crates/rav1e) and decoded with
     [rav1d](https://crates.io/crates/rav1d).
   * Each keyframe starts a new MoQ group, so a viewer who joins late starts at the latest
