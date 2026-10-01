@@ -1,0 +1,108 @@
+/* The dialogs: one compact surface near the top of the window that drops in on the quick
+   clock. The action row is compact outline keys; the tone of the word names what a key does. */
+
+.zui-dialog.ms-dialog {
+    top: 72px;
+    left: 0;
+    right: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 440px;
+    max-height: calc(100% - 144px);
+    gap: var(--zui-space-lg);
+    padding: 20px;
+    border: 1px solid var(--zui-color-border);
+    --zui-surface-place: translate(0px, 0px);
+    --zui-surface-radius: calc(var(--ms-radius) + 2px);
+    --zui-surface-fill: var(--zui-color-popover);
+    --zui-surface-shadow: var(--zui-shadow-md);
+    --zui-surface-enter-duration: var(--ms-quick);
+    --zui-surface-exit-duration: var(--ms-instant);
+    --zui-surface-enter-ease: var(--ms-ease);
+    --zui-surface-exit-ease: var(--ms-ease);
+    --zui-surface-enter-y: -8px;
+    --zui-surface-enter-scale: 1;
+    --zui-surface-exit-y: -8px;
+    --zui-surface-exit-scale: 1;
+}
+
+.ms-dialog .zui-dialog__title {
+    font-size: var(--zui-type-size-md);
+    font-weight: 600;
+}
+
+.ms-dialog .zui-dialog__description {
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-dialog .zui-dialog__footer .zui-button[data-variant] {
+    height: 28px;
+    padding: 0 var(--zui-space-md);
+    border-color: var(--zui-color-border);
+    background-color: var(--zui-surface-fill);
+    color: var(--zui-color-foreground);
+    font-size: 13px;
+    line-height: 16px;
+    --zui-button-lift: 0 0 transparent;
+}
+
+.ms-dialog .zui-dialog__footer .zui-button[data-variant]:hover {
+    background-color: color-mix(in oklab, var(--zui-color-foreground) 6%, var(--zui-surface-fill));
+}
+
+.ms-dialog .zui-dialog__footer .zui-button[data-variant="default"] {
+    border: 1px solid var(--zui-color-border);
+    color: var(--zui-color-primary);
+}
+
+.ms-dialog .zui-dialog__footer .zui-button[data-variant="default"]:hover {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 10%, var(--zui-surface-fill));
+}
+
+/* A form: labels above compact fields. */
+.ms-form {
+    gap: var(--zui-space-md);
+}
+
+.ms-form__row {
+    gap: 6px;
+}
+
+.ms-form__label {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-form .zui-input {
+    height: 30px;
+    font-size: 13px;
+}
+
+/* The displays a share can show, one row each. */
+.ms-monitors {
+    gap: 2px;
+}
+
+.ms-monitor {
+    align-items: center;
+    gap: var(--zui-space-md);
+    height: 36px;
+    padding: 0 var(--zui-space-md);
+    border-radius: var(--zui-radius-md);
+    cursor: pointer;
+}
+
+.ms-monitor:hover {
+    background-color: var(--ms-menu-hover);
+}
+
+.ms-monitor__name {
+    flex: 1 1 0;
+    min-width: 0;
+}
+
+.ms-monitor__size {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}

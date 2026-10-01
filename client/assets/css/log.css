@@ -1,0 +1,85 @@
+/* The log: a dock at the foot of the server column. A strip names it, and lines of what
+   happened stand under the strip. */
+
+.ms-log {
+    flex: 0 0 auto;
+    height: var(--ms-log);
+    min-height: 0;
+    background-color: var(--zui-color-sidebar);
+    color: var(--zui-color-sidebar-foreground);
+    animation: ms-rise var(--ms-quick) var(--ms-ease);
+}
+
+.ms-log__strip {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--zui-space-xs);
+    height: var(--ms-strip);
+    padding: 0 var(--zui-space-xs) 0 var(--zui-space-md);
+}
+
+.ms-log__title {
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-log__count {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-log__gap {
+    flex: 1 1 auto;
+}
+
+.ms-log .ms-key {
+    width: 24px;
+    height: 24px;
+}
+
+.ms-log__scroll {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.ms-log__lines {
+    padding: 0 var(--zui-space-md) var(--zui-space-sm);
+}
+
+.ms-log-line {
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    min-height: var(--ms-log-row);
+    font-family: var(--zui-type-family-mono);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-log-line .ms-dot {
+    width: 6px;
+    height: 6px;
+}
+
+.ms-log-line__time {
+    flex: 0 0 auto;
+    color: var(--zui-color-muted-foreground);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-log-line__text {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+.ms-log-line[data-tone="err"] .ms-log-line__text {
+    color: var(--ms-tone-err);
+}
+
+.ms-log__empty {
+    padding: 4px 0;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}

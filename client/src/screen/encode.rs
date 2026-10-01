@@ -128,6 +128,10 @@ pub struct Sharer {
 
 impl Sharer {
     /// Runs `body` on a capture thread until it returns; `body` watches the stop flag it is given.
+    #[cfg_attr(
+        not(target_os = "macos"),
+        expect(dead_code, reason = "only the macOS capture runs its own thread body")
+    )]
     pub(super) fn run(
         ended: Arc<AtomicBool>,
         body: impl FnOnce(&AtomicBool) + Send + 'static,

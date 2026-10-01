@@ -1,0 +1,182 @@
+/* The channel tree: one column of rows. A row box stands inside its slot, so a hover reads as a
+   card. The slots touch. */
+
+.ms-tree {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+/* The rows end above the pill, so the last row is never under it. */
+.ms-tree__rows {
+    padding: var(--zui-space-xs) 0 calc(var(--ms-pill) + 32px);
+}
+
+.ms-row {
+    display: flex;
+    align-items: center;
+    gap: var(--zui-space-sm);
+    height: var(--ms-row);
+    margin: 0 var(--zui-space-sm);
+    padding-right: var(--zui-space-md);
+    border-radius: var(--zui-radius-md);
+    font-size: var(--zui-type-size-sm);
+    cursor: pointer;
+}
+
+.ms-row:hover,
+.ms-row[data-menu="open"] {
+    background-color: var(--zui-color-secondary);
+}
+
+.ms-row[data-selected="true"] {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 10%, transparent);
+}
+
+.ms-row[data-selected="true"]:hover {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 15%, transparent);
+}
+
+.ms-row:focus-visible {
+    outline: none;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--zui-color-primary) 40%, transparent);
+}
+
+/* The channel a dragged client would land in. */
+.ms-row[data-drop="true"] {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 18%, transparent);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--zui-color-primary) 50%, transparent);
+}
+
+.ms-row__name {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-row__gap {
+    flex: 1 1 auto;
+}
+
+/* The chevron that folds a channel. It turns a quarter while the channel stands open. */
+.ms-twisty {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    color: var(--zui-color-muted-foreground);
+    transform: rotate(0deg);
+}
+
+.ms-twisty[data-open="true"] {
+    transform: rotate(90deg);
+}
+
+.ms-twisty:hover {
+    color: var(--zui-color-foreground);
+}
+
+.ms-twisty[data-empty="true"] {
+    visibility: hidden;
+}
+
+.ms-row__mark {
+    color: var(--zui-color-muted-foreground);
+}
+
+/* The channel you are in. */
+.ms-row--channel[data-mine="true"] .ms-row__name {
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-row--channel[data-mine="true"] .ms-row__mark {
+    color: var(--zui-color-primary);
+}
+
+/* The count holds the trailing edge. */
+.ms-row__count {
+    flex: 0 0 auto;
+    min-width: 16px;
+    text-align: right;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-row__count[data-full="true"] {
+    color: var(--ms-tone-warn);
+}
+
+/* A client: the dot stands where the channel mark stands one level up. */
+.ms-row--client {
+    color: var(--zui-color-foreground);
+}
+
+.ms-row--client[data-away="true"] .ms-row__name {
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-row--client .ms-dot {
+    margin: 0 3px;
+}
+
+.ms-row__flags {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 6px;
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-row__flag[data-tone="err"] {
+    color: var(--ms-tone-err);
+}
+
+/* Why the tree is empty. */
+.ms-tree__notice {
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    gap: var(--zui-space-md);
+    color: var(--zui-color-muted-foreground);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* A slider inside a client's menu. */
+.ms-menu-volume {
+    align-items: center;
+    gap: 8px;
+    padding: 2px 8px 6px;
+}
+
+.ms-menu-volume__slider {
+    flex: 1 1 auto;
+    width: 140px;
+}
+
+.ms-menu-volume__value {
+    flex: 0 0 auto;
+    width: 36px;
+    text-align: right;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+/* The facts at the head of a client's menu. */
+.ms-menu-facts {
+    gap: 1px;
+    padding: 4px 8px 6px;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-menu-facts__name {
+    color: var(--zui-color-popover-foreground);
+    font-size: var(--ms-menu-text);
+    font-weight: var(--zui-type-weight-medium);
+}

@@ -110,6 +110,10 @@ pub enum Command {
         monitor: u32,
     },
     /// Shares what the user chose in the system picker.
+    #[cfg_attr(
+        not(target_os = "macos"),
+        expect(dead_code, reason = "only the macOS system picker shares this way")
+    )]
     StartSharePicked(Handoff<Picked>),
     StopShare,
     /// Streams `client`'s screen into `sink` until [`Command::Unwatch`] names the same `view`.

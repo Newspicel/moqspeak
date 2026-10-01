@@ -1,0 +1,97 @@
+/* The pill: your own voice controls, floating over the foot of the tree. The seat spans the
+   column and lets every press through; only the pill takes one. */
+
+.ms-pill-seat {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 16px;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.ms-pill {
+    align-items: center;
+    gap: 2px;
+    height: var(--ms-pill);
+    padding: 0 5px;
+    border: 1px solid var(--zui-color-border);
+    border-radius: 999px;
+    background-color: var(--zui-color-popover);
+    color: var(--zui-color-popover-foreground);
+    box-shadow: var(--zui-shadow-md);
+    pointer-events: auto;
+    animation: ms-rise var(--ms-quick) var(--ms-ease);
+}
+
+.ms-pill .ms-key {
+    width: 30px;
+    height: 30px;
+    border-radius: 999px;
+}
+
+.ms-pill .ms-key:hover {
+    background-color: var(--ms-menu-hover);
+}
+
+.ms-pill__sep {
+    flex: 0 0 auto;
+    width: 1px;
+    height: 16px;
+    margin: 0 4px;
+    background-color: var(--zui-color-border);
+}
+
+/* You: the dot that lights while you transmit, then your name. */
+.ms-pill .zui-button.ms-self[data-size] {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    max-width: 200px;
+    height: 30px;
+    padding: 0 12px 0 11px;
+    border-radius: 999px;
+    color: var(--zui-color-popover-foreground);
+    font-size: var(--zui-type-size-sm);
+    font-weight: var(--zui-type-weight-medium);
+    border: none;
+    background-color: transparent;
+    box-shadow: none;
+    --zui-button-lift: 0 0 transparent;
+}
+
+.ms-pill .zui-button.ms-self[data-size]:hover,
+.ms-pill .zui-button.ms-self[data-size][data-state="open"] {
+    background-color: var(--ms-menu-hover);
+}
+
+.ms-self__name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-self__kbd {
+    flex: 0 0 auto;
+    padding: 0 4px;
+    border: 1px solid var(--zui-color-border);
+    border-radius: 3px;
+    color: var(--zui-color-muted-foreground);
+    font-size: 10px;
+    font-weight: var(--zui-type-weight-normal);
+    line-height: 14px;
+}
+
+/* The key held to talk lights while it is held. */
+.ms-pill .ms-key.ms-talk[data-on="true"] {
+    background-color: color-mix(in oklab, var(--ms-talk) 18%, transparent);
+    color: var(--ms-talk);
+}
+
+@keyframes ms-rise {
+    from { opacity: 0; translate: 0 6px; }
+    to { opacity: 1; translate: 0 0; }
+}

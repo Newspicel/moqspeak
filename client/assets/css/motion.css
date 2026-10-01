@@ -1,0 +1,52 @@
+/* How the interface moves. Two durations and one easing. The library's own motion tokens are set
+   from the same values in the theme, so a menu, a dialog and the chat move on one clock. */
+
+:root {
+    --ms-quick: 90ms;
+    --ms-instant: 60ms;
+    --ms-ease: cubic-bezier(0.2, 0, 0, 1);
+    --ms-pulse: 1600ms;
+}
+
+/* A hover tone switches at once, so a fast pointer lights each row it rests on. A chosen row
+   fades its tint. */
+.ms-row[data-selected="true"] {
+    transition: background-color var(--ms-quick) var(--ms-ease);
+}
+
+.ms-row:hover {
+    transition: none;
+}
+
+.ms-twisty {
+    transition: transform var(--ms-quick) var(--ms-ease);
+}
+
+.ms-dot {
+    transition: background-color var(--ms-instant) var(--ms-ease),
+                box-shadow var(--ms-instant) var(--ms-ease);
+}
+
+.ms-chat-tab__close,
+.ms-servers__row .ms-key {
+    transition: opacity var(--ms-instant) var(--ms-ease);
+}
+
+/* A library control switches its hover tone at once. Its frame and ring keep the library
+   clock. */
+.ms-frame .zui-button,
+.ms-frame .zui-toggle,
+.ms-frame .zui-settings__page {
+    transition-property: border-color, box-shadow;
+}
+
+/* A status mark pulses while what it stands for is on its way to a state. */
+.ms-dot[data-busy="true"] {
+    animation: ms-dot-pulse var(--ms-pulse) var(--ms-ease) infinite;
+}
+
+@keyframes ms-dot-pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.35; }
+    100% { opacity: 1; }
+}

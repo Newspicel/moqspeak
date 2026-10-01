@@ -1,0 +1,323 @@
+/* The settings page: the sections down a sidebar-tone column and their controls beside it. */
+
+.ms-settings {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    --ms-settings-control: 220px;
+}
+
+.ms-settings .zui-settings__pages {
+    width: 220px;
+    height: 100%;
+    padding: 0 var(--zui-space-sm) var(--zui-space-md);
+    border-right-width: 0;
+    background-color: var(--zui-color-sidebar);
+}
+
+/* The head of the column: the way back and the page's name. It moves the window. */
+.ms-settings__head {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--zui-space-xs);
+    height: var(--ms-bar);
+    margin-bottom: var(--zui-space-sm);
+    color: var(--zui-color-foreground);
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-frame[data-platform="macos"] .ms-settings__head {
+    padding-left: 68px;
+}
+
+.ms-settings .zui-settings__page {
+    gap: var(--zui-space-sm);
+    height: 28px;
+    padding: 0 var(--zui-space-sm);
+    border-radius: var(--zui-radius-md);
+    font-size: var(--zui-type-size-sm);
+    font-weight: var(--zui-type-weight-normal);
+    color: var(--zui-color-sidebar-foreground);
+}
+
+.ms-settings .zui-settings__page:hover {
+    background-color: color-mix(in oklab, var(--zui-color-sidebar-accent) 80%, transparent);
+}
+
+.ms-settings .zui-settings__page[data-state="active"] {
+    background-color: var(--zui-color-sidebar-accent);
+    color: var(--zui-color-sidebar-accent-foreground);
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-settings__main {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+}
+
+/* The strip over the panes: room for the window keys, and a press that moves the window. */
+.ms-settings__bar {
+    flex: 0 0 auto;
+    height: var(--ms-bar);
+}
+
+.ms-settings .zui-settings__pane {
+    align-items: center;
+    gap: var(--zui-space-xl);
+    padding: 0 var(--zui-space-xl) var(--zui-space-xl);
+}
+
+.ms-settings .zui-settings__pane > * {
+    width: 100%;
+    max-width: 640px;
+}
+
+.ms-settings .zui-settings__item {
+    padding-block: var(--zui-space-sm);
+}
+
+.ms-settings .zui-settings__item-description {
+    font-size: var(--zui-type-size-xs);
+    line-height: var(--zui-type-leading-xs);
+}
+
+/* Every select stands in one column, 28px tall, with 13px text. */
+.ms-settings .ms-settings__control {
+    width: var(--ms-settings-control);
+    height: 28px;
+    font-size: var(--ms-menu-text);
+}
+
+.ms-settings__slider {
+    align-items: center;
+    gap: var(--zui-space-md);
+    width: var(--ms-settings-control);
+}
+
+.ms-settings__slider .zui-slider {
+    flex: 1 1 auto;
+}
+
+.ms-settings__value {
+    flex: 0 0 auto;
+    width: 48px;
+    text-align: right;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-settings__note {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-settings__note[data-tone="err"] {
+    color: var(--ms-tone-err);
+}
+
+/* A switch between a few values: one framed group, ghost keys in it, the chosen one on the
+   accent tone. */
+.ms-switch.zui-toggle-group {
+    gap: 2px;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--zui-color-border);
+    border-radius: var(--ms-radius);
+    background-color: transparent;
+    box-shadow: none;
+}
+
+.ms-switch.zui-toggle-group > .zui-toggle {
+    height: 22px;
+    min-width: 0;
+    padding: 0 8px;
+    border: none;
+    border-radius: calc(var(--ms-radius) - 2px);
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    line-height: var(--zui-type-leading-xs);
+}
+
+.ms-switch.zui-toggle-group > .zui-toggle:hover {
+    background-color: transparent;
+    color: var(--zui-color-foreground);
+}
+
+.ms-switch.zui-toggle-group > .zui-toggle[data-state="on"] {
+    background-color: var(--zui-color-accent);
+    color: var(--zui-color-accent-foreground);
+}
+
+/* The level meter: the bar fills with the input level, the mark stands at the threshold. */
+.ms-meter {
+    position: relative;
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background-color: var(--zui-color-secondary);
+    overflow: hidden;
+}
+
+.ms-meter__fill {
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    border-radius: 3px;
+    background-color: var(--ms-tone-idle);
+}
+
+.ms-meter__fill[data-hot="true"] {
+    background-color: var(--ms-talk);
+}
+
+.ms-meter__mark {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: var(--zui-color-foreground);
+}
+
+.ms-vad {
+    gap: var(--zui-space-sm);
+}
+
+.ms-vad__readout {
+    align-items: center;
+    justify-content: space-between;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-vad__speech[data-on="true"] {
+    color: var(--ms-talk);
+}
+
+/* The theme picker: every theme as the colours it wears. */
+.ms-themes {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--zui-space-sm);
+}
+
+.ms-theme {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--zui-space-xs);
+    padding: var(--zui-space-xs);
+    border-radius: var(--zui-radius-md);
+    color: var(--zui-color-muted-foreground);
+    cursor: pointer;
+}
+
+.ms-theme:hover {
+    background-color: var(--zui-color-accent);
+}
+
+.ms-theme[data-chosen="true"] {
+    background-color: var(--zui-color-accent);
+    color: var(--zui-color-accent-foreground);
+}
+
+.ms-theme:focus-visible {
+    outline: 1px solid var(--zui-color-ring);
+    outline-offset: 1px;
+}
+
+.ms-theme__surfaces {
+    display: flex;
+    flex-direction: row;
+    gap: 2px;
+}
+
+.ms-theme__surface {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 3px;
+    width: 34px;
+    height: 24px;
+    padding: 0 2px;
+    border: 1px solid var(--zui-color-border);
+    border-radius: var(--zui-radius-sm);
+    overflow: hidden;
+}
+
+.ms-theme__plane {
+    flex: 0 0 auto;
+    width: 6px;
+    height: 18px;
+    border-radius: 1px;
+}
+
+.ms-theme__marks {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ms-theme__dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+}
+
+.ms-theme__line {
+    width: 100%;
+    height: 2px;
+    border-radius: 1px;
+    opacity: 0.7;
+}
+
+.ms-theme__name {
+    width: 74px;
+    text-align: center;
+    font-size: var(--zui-type-size-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-about {
+    gap: var(--zui-space-sm);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-sm);
+    line-height: 20px;
+}
+
+/* The back key points the way it leads. */
+.ms-settings__back .ms-icon {
+    rotate: 180deg;
+}
+
+/* The threshold meter takes the width of the control column. */
+.ms-settings .ms-vad {
+    width: var(--ms-settings-control);
+}
+
+.ms-settings .ms-vad .ms-settings__slider {
+    width: 100%;
+}
+
+/* A long device name shortens inside the select, so the chevron stays in its frame. */
+.ms-settings .ms-settings__control .ms-settings__value-text {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+}

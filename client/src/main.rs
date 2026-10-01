@@ -1,4 +1,4 @@
-//! moqspeak: a TeamSpeak 3 style voice client on zgui and Media over QUIC.
+//! moqspeak: a voice client on zgui and Media over QUIC.
 
 // A release build on Windows is a GUI program with no console window.
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
@@ -13,11 +13,10 @@ mod screen;
 mod ui;
 
 use zgui::prelude::*;
-use zgui_ui_tokens::prelude::*;
 
 use crate::engine::Engine;
 use crate::ui::AppState;
-use crate::ui::shell::ShellProps;
+use crate::ui::RootProps;
 
 /// The window icon, decoded from the PNG the build embeds.
 fn window_icon() -> WindowIcon {
@@ -55,12 +54,13 @@ fn main() -> Result<(), zgui::Error> {
     app()
         .with_application_id("dev.moqspeak.Client")
         .with_title("moqspeak")
-        .with_size(1100.0, 760.0)
-        .with_min_size(720.0, 480.0)
+        .with_size(1100.0, 720.0)
+        .with_min_size(640.0, 440.0)
+        .with_decorations(Decorations::NoTitleBar)
         .with_icon(window_icon())
         // Pop-out screen windows have no life of their own.
         .with_exit_policy(ExitPolicy::WhenPrimaryCloses)
-        .with_stylesheet(ui::SHEET)
+        .with_stylesheet(ui::sheet())
         .run(move || {
             let (engine, mut events) = boot.take().expect("one main window");
             let state = AppState::new(engine);
@@ -75,13 +75,22 @@ fn main() -> Result<(), zgui::Error> {
             // and the OS closes the sockets; tearing the tree down piece by piece only gives
             // late reactive work a chance to touch values that are already gone.
             std::mem::forget(on_close_request(|| std::process::exit(0)));
-            state.info("Welcome to moqspeak. Connect to a server to start talking.");
-            // A development aid for screenshots: MOQSPEAK_OPEN=connect|options|about.
-            match std::env::var("MOQSPEAK_OPEN").as_deref() {
-                Ok("connect") => state.modal.set(ui::state::Modal::Connect),
-                Ok("options") => state.modal.set(ui::state::Modal::Options),
-                Ok("about") => state.modal.set(ui::state::Modal::About),
-                _ => {}
+            // A development aid for screenshots: MOQSPEAK_OPEN=connect,settings,appearance,log,chat.
+            for open in std::env::var("MOQSPEAK_OPEN")
+                .unwrap_or_default()
+                .split(',')
+            {
+                match open {
+                    "connect" => state.modal.set(ui::state::Modal::Connect),
+                    "settings" => state.settings_open.set(true),
+                    "appearance" => {
+                        state.settings_page.set("appearance".into());
+                        state.settings_open.set(true);
+                    }
+                    "log" => state.log_open.set(true),
+                    "chat" => state.chat.update(|c| c.toggle()),
+                    _ => {}
+                }
             }
             if let Some(address) = autoconnect.clone() {
                 let nickname = autonick
@@ -89,14 +98,6 @@ fn main() -> Result<(), zgui::Error> {
                     .unwrap_or_else(|| state.settings.with_untracked(|s| s.nickname.clone()));
                 state.connect(address, nickname);
             }
-            view! {
-                ThemeProvider(scheme = Signal::derive_local(move || match state.theme.get() {
-                    ui::state::Theme::System => ColorScheme::System,
-                    ui::state::Theme::Dark => ColorScheme::Dark,
-                    ui::state::Theme::Light => ColorScheme::Light,
-                })) {
-                    Shell()
-                }
-            }
+            view! { Root() }
         })
 }

@@ -1,0 +1,101 @@
+/* The row at the top of the server column: the server, where you are, and the keys for what the
+   window shows. The whole row moves the window. It keeps `--ms-keys` of room free at its trailing
+   edge while the window keys stand over it. */
+
+.ms-head {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--zui-space-xs);
+    height: var(--ms-bar);
+    padding: 0 var(--ms-keys) 0 var(--zui-space-sm);
+    color: var(--zui-color-muted-foreground);
+}
+
+/* With the chat open, the window keys stand over the chat head. */
+.ms-frame[data-chat="open"] .ms-head {
+    padding-right: var(--zui-space-sm);
+}
+
+/* The macOS window buttons stand at the leading corner. */
+.ms-frame[data-platform="macos"] .ms-head {
+    padding-left: 76px;
+}
+
+.ms-head__gap {
+    flex: 1 1 auto;
+    min-width: var(--zui-space-lg);
+}
+
+/* The server: its mark, its name and the chevron of its menu, as one ghost key. */
+.ms-head .zui-button.ms-server[data-size] {
+    flex: 0 1 auto;
+    min-width: 0;
+    gap: var(--zui-space-sm);
+    height: var(--ms-key);
+    padding: 0 var(--zui-space-sm);
+    border: none;
+    border-radius: var(--zui-radius-md);
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-sm);
+    font-weight: var(--zui-type-weight-medium);
+    --zui-button-lift: 0 0 transparent;
+}
+
+.ms-head .zui-button.ms-server[data-size]:hover,
+.ms-head .zui-button.ms-server[data-size][data-state="open"] {
+    background-color: var(--zui-color-accent);
+}
+
+.ms-server__name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-server__chevron {
+    color: var(--zui-color-muted-foreground);
+}
+
+/* Where you are, after the server. */
+.ms-where {
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--zui-space-xs);
+    min-width: 0;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-sm);
+}
+
+.ms-where__sep {
+    color: color-mix(in oklab, var(--zui-color-muted-foreground) 60%, transparent);
+}
+
+.ms-where__name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* The facts under the server menu's title. */
+.ms-server-facts {
+    gap: 2px;
+    padding: 6px 8px 8px;
+    font-size: var(--zui-type-size-xs);
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-server-facts__title {
+    align-items: center;
+    gap: 8px;
+    color: var(--zui-color-popover-foreground);
+    font-size: var(--ms-menu-text);
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-server-facts__line {
+    font-variant-numeric: tabular-nums;
+}

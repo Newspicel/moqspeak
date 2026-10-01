@@ -1,0 +1,78 @@
+/* Rose Pine, for a dark surface.
+
+   The base variant. Ink with muted accents; the sixteen grid colours are the
+   variant's own.
+
+   The file holds custom properties only. `--zui-*` are the component library's tokens, read by the
+   theme provider. The rest are the application's own: the status tones and the menu hover. */
+
+/* Compact and flat. */
+--zui-space-base: 3px;
+--ms-radius: 8px;
+--zui-radius-base: var(--ms-radius);
+--zui-shadow-xs: none;
+--zui-shadow-sm: none;
+--zui-shadow-md: 0 4px 16px oklch(0 0 0 / 40%);
+
+/* Short motion, one easing. */
+--zui-motion-duration-fast: 60ms;
+--zui-motion-duration-normal: 90ms;
+--zui-motion-duration-slow: 90ms;
+--zui-motion-duration-slower: 90ms;
+--zui-motion-duration-slowest: 90ms;
+--zui-motion-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+--zui-color-background: oklch(0.213 0.025 291.1);
+--zui-color-foreground: oklch(0.909 0.030 290.0);
+--zui-color-card: oklch(0.213 0.025 291.1);
+--zui-color-card-foreground: oklch(0.909 0.030 290.0);
+--zui-color-popover: oklch(0.241 0.032 289.1);
+--zui-color-popover-foreground: oklch(0.909 0.030 290.0);
+--zui-color-tooltip: color-mix(in oklab, var(--zui-color-popover) 94%, var(--zui-color-foreground));
+--zui-color-tooltip-foreground: var(--zui-color-popover-foreground);
+--zui-color-tooltip-border: var(--zui-color-border);
+
+--zui-color-primary: oklch(0.822 0.054 209.6);
+--zui-color-primary-foreground: oklch(0.213 0.025 291.1);
+--zui-color-secondary: oklch(0.271 0.042 289.2);
+--zui-color-secondary-foreground: oklch(0.909 0.030 290.0);
+--zui-color-accent: oklch(0.271 0.042 289.2);
+--zui-color-accent-foreground: oklch(0.909 0.030 290.0);
+--zui-color-muted: oklch(0.251 0.026 287.6);
+--zui-color-muted-foreground: oklch(0.654 0.044 291.2);
+
+--zui-color-border: oklch(1 0 0 / 8%);
+--zui-color-input: oklch(1 0 0 / 12%);
+--zui-color-ring: oklch(0.822 0.054 209.6);
+--zui-color-scrim: oklch(0 0 0 / 55%);
+
+--zui-color-destructive: oklch(0.698 0.156 4.2);
+--zui-color-destructive-foreground: oklch(0.213 0.025 291.1);
+--zui-color-success: oklch(0.528 0.079 227.7);
+--zui-color-success-foreground: oklch(0.213 0.025 291.1);
+--zui-color-warning: oklch(0.843 0.110 74.6);
+--zui-color-warning-foreground: oklch(0.213 0.025 291.1);
+--zui-color-info: oklch(0.776 0.095 305.0);
+--zui-color-info-foreground: oklch(0.213 0.025 291.1);
+
+--zui-color-sidebar: oklch(0.199 0.022 292.6);
+--zui-color-sidebar-foreground: oklch(0.654 0.044 291.2);
+--zui-color-sidebar-primary: oklch(0.822 0.054 209.6);
+--zui-color-sidebar-primary-foreground: oklch(0.213 0.025 291.1);
+--zui-color-sidebar-accent: oklch(0.271 0.042 289.2);
+--zui-color-sidebar-accent-foreground: oklch(0.909 0.030 290.0);
+--zui-color-sidebar-border: oklch(1 0 0 / 10%);
+--zui-color-sidebar-ring: oklch(0.822 0.054 209.6);
+
+/* What a status mark is painted with. */
+--ms-tone-ok: var(--zui-color-success);
+--ms-tone-warn: var(--zui-color-warning);
+--ms-tone-err: var(--zui-color-destructive);
+--ms-tone-info: var(--zui-color-info);
+--ms-tone-idle: var(--zui-color-muted-foreground);
+
+/* What a voice that speaks is painted with. */
+--ms-talk: var(--zui-color-success);
+
+/* What a menu row under the pointer or the keys is painted with: one step off the popover. */
+--ms-menu-hover: oklch(0.316 0.032 289.1);

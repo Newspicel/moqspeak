@@ -1,0 +1,25 @@
+/* The announcements in the corner of the window. One announcement reads as one line of the
+   interface. */
+
+.zui-toast__region.ms-notice {
+    --zui-toast-width: 320px;
+    --zui-toast-gap: 8px;
+    margin: 12px;
+}
+
+.ms-notice .zui-toast {
+    gap: var(--zui-space-sm);
+    padding: 8px 10px;
+    border-radius: var(--ms-radius);
+    font-size: var(--zui-type-size-sm);
+    box-shadow: 0 2px 8px rgb(0 0 0 / 0.18);
+}
+
+.ms-notice .zui-toast__description {
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-notice .zui-toast__action,
+.ms-notice .zui-toast__cancel {
+    height: 20px;
+}

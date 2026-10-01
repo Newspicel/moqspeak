@@ -1,29 +1,28 @@
-//! The TeamSpeak 3 style interface.
+//! The interface: a channel tree with your voice controls floating over it, a chat beside it
+//! that opens when there is a conversation, and a log under it on request.
 
-pub mod avatar;
-pub mod chat;
-pub mod dialogs;
-pub mod icons;
-pub mod info;
-pub mod menu;
-pub mod options;
-pub mod screen;
-pub mod shell;
+#![allow(
+    clippy::redundant_closure,
+    reason = "`view!` reads its conditions and lists through closure syntax"
+)]
+
+mod assets;
+mod chat;
+mod dialogs;
+mod frame;
+mod head;
+mod home;
+mod log;
+mod notices;
+mod parts;
+mod pill;
+mod root;
+mod screen;
+mod settings;
 pub mod state;
-pub mod status;
-pub mod toolbar;
-pub mod tree;
+mod theme;
+mod tree;
 
-pub use state::AppState;
-
-/// The application style sheet.
-pub const SHEET: &str = include_str!("style.css");
-
-/// Erases a view's type so branches of a `match` can return different views.
-pub trait IntoAny: zgui::prelude::IntoView + Sized {
-    fn into_any(self) -> zgui::prelude::AnyView {
-        zgui::prelude::AnyView::new(self)
-    }
-}
-
-impl<T: zgui::prelude::IntoView> IntoAny for T {}
+pub use crate::ui::assets::sheet;
+pub use crate::ui::root::RootProps;
+pub use crate::ui::state::AppState;

@@ -1,0 +1,41 @@
+/* What the interface measures itself by.
+
+   Every length two regions share lives here. A rule written on `:root:root` outranks the `:root`
+   rule the theme provider writes, whichever order the two reach the document in. */
+
+:root:root {
+    /* The compact spacing unit, and the faces the window is set in. */
+    --zui-space-base: 4px;
+    --zui-type-family-sans: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
+    --zui-type-family-mono: "Geist Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+:root {
+    /* How large an icon is drawn at each step. */
+    --zui-icon-xs: 12px;
+    --zui-icon-sm: 14px;
+    --zui-icon-md: 16px;
+    --zui-icon-lg: 20px;
+
+    /* The regions of the window. */
+    --ms-bar: 40px;
+    --ms-keys: 96px;
+    --ms-key: 28px;
+    --ms-chat: 360px;
+    --ms-log: 180px;
+    --ms-strip: 30px;
+    --ms-pill: 40px;
+    --ms-home: 520px;
+
+    /* One row of the channel tree. `ROW` in Rust holds the same length. */
+    --ms-row: 28px;
+    --ms-indent: 22px;
+    /* A row of a menu or a list popup, and the text on it. */
+    --ms-menu-row: 24px;
+    --ms-menu-text: 13px;
+    /* One line of the log. */
+    --ms-log-row: 22px;
+
+    /* How wide a window edge is to grab. */
+    --ms-grab: 6px;
+}

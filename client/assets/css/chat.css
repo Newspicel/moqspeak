@@ -1,0 +1,224 @@
+/* The chat: a column beside the server that opens to its width when there is a conversation to
+   show. The inner column keeps its width, so the words never reflow while the column moves. */
+
+.ms-chat {
+    flex: 0 0 auto;
+    width: 0;
+    height: 100%;
+    overflow: hidden;
+    background-color: var(--zui-color-sidebar);
+    color: var(--zui-color-sidebar-foreground);
+    transition: width var(--ms-quick) var(--ms-ease);
+}
+
+.ms-chat[data-open="true"] {
+    width: var(--ms-chat);
+}
+
+.ms-chat__inner {
+    flex: 0 0 auto;
+    width: var(--ms-chat);
+    height: 100%;
+    min-height: 0;
+}
+
+/* The head: the conversations as ghost tabs. It keeps room for the window keys. */
+.ms-chat__head {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: 2px;
+    height: var(--ms-bar);
+    padding: 0 var(--ms-keys) 0 var(--zui-space-sm);
+}
+
+.ms-chat__tabs {
+    flex: 1 1 0;
+    align-items: center;
+    gap: 2px;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.ms-chat-tab {
+    display: flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    max-width: 160px;
+    height: 24px;
+    padding: 0 8px;
+    border-radius: var(--zui-radius-sm);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-sm);
+    cursor: pointer;
+}
+
+.ms-chat-tab:hover {
+    background-color: var(--zui-color-sidebar-accent);
+}
+
+.ms-chat-tab[data-active="true"] {
+    background-color: var(--zui-color-sidebar-accent);
+    color: var(--zui-color-sidebar-accent-foreground);
+}
+
+.ms-chat-tab__name {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-chat-tab__unread {
+    flex: 0 0 auto;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background-color: var(--zui-color-primary);
+}
+
+/* One slot at the end of a private tab: the cross shows under the pointer. */
+.ms-chat-tab__close {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    margin-right: -4px;
+    border-radius: 3px;
+    opacity: 0;
+}
+
+.ms-chat-tab:hover .ms-chat-tab__close {
+    opacity: 1;
+}
+
+.ms-chat-tab__close:hover {
+    background-color: color-mix(in oklab, var(--zui-color-foreground) 10%, transparent);
+    color: var(--zui-color-foreground);
+}
+
+/* The topic of the channel, under the head. */
+.ms-chat__topic {
+    flex: 0 0 auto;
+    padding: 0 var(--zui-space-md) var(--zui-space-sm);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-chat__scroll {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.ms-chat__log {
+    gap: 2px;
+    padding: var(--zui-space-sm) var(--zui-space-md) var(--zui-space-md);
+}
+
+.ms-chat__empty {
+    flex: 1 1 0;
+    align-items: center;
+    justify-content: center;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+/* One message. A message from the same writer soon after the last one drops its head. */
+.ms-msg {
+    gap: 1px;
+    min-width: 0;
+}
+
+.ms-msg[data-head="true"] {
+    margin-top: 10px;
+}
+
+.ms-msg__head {
+    align-items: baseline;
+    gap: 8px;
+}
+
+.ms-msg__from {
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-sm);
+    font-weight: var(--zui-type-weight-medium);
+}
+
+.ms-msg[data-own="true"] .ms-msg__from {
+    color: var(--zui-color-primary);
+}
+
+.ms-msg__time {
+    color: var(--zui-color-muted-foreground);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+}
+
+.ms-msg__text {
+    color: color-mix(in oklab, var(--zui-color-foreground) 88%, transparent);
+    font-size: var(--zui-type-size-sm);
+    line-height: 20px;
+    overflow-wrap: break-word;
+}
+
+/* A note: a poke or the server's welcome. */
+.ms-msg--note {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    border-radius: var(--zui-radius-md);
+    background-color: color-mix(in oklab, var(--zui-color-foreground) 4%, transparent);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    line-height: 16px;
+}
+
+.ms-msg--note .ms-msg__text {
+    flex: 1 1 0;
+    min-width: 0;
+    color: inherit;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* The composer: one framed field at the foot. The field carries the frame, so the box that takes
+   the text wears none. */
+.ms-composer {
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--zui-space-sm);
+    height: 34px;
+    margin: 0 var(--zui-space-md) var(--zui-space-md);
+    padding: 0 var(--zui-space-sm) 0 var(--zui-space-md);
+    border: 1px solid var(--zui-color-border);
+    border-radius: var(--zui-radius-md);
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-composer .ms-composer__input {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-sm);
+    line-height: var(--zui-type-leading-sm);
+}
+
+.ms-composer .ms-composer__input:focus-visible {
+    border: none;
+    box-shadow: none;
+}

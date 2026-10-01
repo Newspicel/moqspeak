@@ -1,0 +1,242 @@
+/* The window itself: the page under everything, the regions, the window keys and the strips the
+   desktop resizes by. */
+
+:root {
+    background-color: var(--zui-color-background);
+    color: var(--zui-color-foreground);
+    font-family: var(--zui-type-family-sans);
+    font-size: var(--zui-type-size-sm);
+    overflow: hidden;
+}
+
+.ms-frame {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.ms-body {
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+}
+
+/* The column of the server: the head, the tree with the pill over it, and the log under it. */
+.ms-main {
+    flex: 1 1 0;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+}
+
+.ms-stage {
+    position: relative;
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Minimise, maximise and close, at the top right corner of the window. Every head keeps
+   `--ms-keys` of room free at that edge. */
+.ms-corner {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: var(--ms-keys);
+    height: var(--ms-bar);
+    align-items: center;
+    justify-content: flex-end;
+    gap: 2px;
+    padding-right: var(--zui-space-sm);
+}
+
+.ms-corner__key {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--zui-radius-sm);
+    color: var(--zui-color-muted-foreground);
+    cursor: pointer;
+}
+
+.ms-corner__key:hover {
+    background-color: var(--zui-color-accent);
+    color: var(--zui-color-foreground);
+}
+
+.ms-corner__key--close:hover {
+    background-color: var(--zui-color-destructive);
+    color: var(--zui-color-destructive-foreground);
+}
+
+/* The frame that holds the resize strips covers the whole window, so it lets every press
+   through. Only the strips themselves take one. */
+.ms-edges { position: absolute; top: 0; left: 0; right: 0; bottom: 0; pointer-events: none; }
+.ms-edge { position: absolute; pointer-events: auto; }
+.ms-edge--n { top: 0; left: var(--ms-grab); right: var(--ms-grab); height: var(--ms-grab); }
+.ms-edge--s { bottom: 0; left: var(--ms-grab); right: var(--ms-grab); height: var(--ms-grab); }
+.ms-edge--w { left: 0; top: var(--ms-grab); bottom: var(--ms-grab); width: var(--ms-grab); }
+.ms-edge--e { right: 0; top: var(--ms-grab); bottom: var(--ms-grab); width: var(--ms-grab); }
+.ms-edge--nw { top: 0; left: 0; width: var(--ms-grab); height: var(--ms-grab); }
+.ms-edge--ne { top: 0; right: 0; width: var(--ms-grab); height: var(--ms-grab); }
+.ms-edge--sw { bottom: 0; left: 0; width: var(--ms-grab); height: var(--ms-grab); }
+.ms-edge--se { bottom: 0; right: 0; width: var(--ms-grab); height: var(--ms-grab); }
+
+/* An icon is a box in a line of text. It keeps its size while the row around it grows. The fill
+   stays undeclared, so the document takes the computed `color`. */
+.ms-icon {
+    display: inline-block;
+    flex: none;
+    pointer-events: none;
+    width: var(--ms-icon-size);
+    height: var(--ms-icon-size);
+    --ms-icon-size: var(--zui-icon-md, 16px);
+}
+
+.ms-icon[data-size="xs"] { --ms-icon-size: var(--zui-icon-xs, 12px); }
+.ms-icon[data-size="sm"] { --ms-icon-size: var(--zui-icon-sm, 14px); }
+.ms-icon[data-size="lg"] { --ms-icon-size: var(--zui-icon-lg, 20px); }
+
+/* A status mark. The tone names which colour, never an icon. */
+.ms-dot {
+    flex: 0 0 auto;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: var(--ms-tone-idle);
+}
+
+.ms-dot[data-tone="ok"] { background-color: var(--ms-tone-ok); }
+.ms-dot[data-tone="warn"] { background-color: var(--ms-tone-warn); }
+.ms-dot[data-tone="err"] { background-color: var(--ms-tone-err); }
+.ms-dot[data-tone="info"] { background-color: var(--ms-tone-info); }
+.ms-dot[data-tone="idle"] { background-color: var(--ms-tone-idle); }
+
+/* A voice that speaks: the talk tone and a soft ring around it. */
+.ms-dot[data-tone="talk"] {
+    background-color: var(--ms-talk);
+    box-shadow: 0 0 0 3px color-mix(in oklab, var(--ms-talk) 28%, transparent);
+}
+
+/* A small word beside a name. */
+.ms-tag {
+    flex: 0 0 auto;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: var(--zui-color-secondary);
+    color: var(--zui-color-muted-foreground);
+    font-size: 11px;
+    line-height: 14px;
+    white-space: nowrap;
+}
+
+.ms-tag[data-tone="primary"] {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 14%, transparent);
+    color: var(--zui-color-primary);
+}
+
+.ms-tag[data-tone="err"] {
+    background-color: color-mix(in oklab, var(--ms-tone-err) 14%, transparent);
+    color: var(--ms-tone-err);
+}
+
+/* A ghost key: muted at rest, a tone under the pointer, the tone of its state while it holds
+   one. */
+.ms-key {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: var(--ms-key);
+    height: var(--ms-key);
+    border-radius: var(--zui-radius-md);
+    color: var(--zui-color-muted-foreground);
+    cursor: pointer;
+}
+
+.ms-key:hover {
+    background-color: var(--zui-color-accent);
+    color: var(--zui-color-foreground);
+}
+
+.ms-key:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px color-mix(in oklab, var(--zui-color-ring) 60%, transparent);
+}
+
+.ms-key[data-on="true"] {
+    background-color: var(--zui-color-accent);
+    color: var(--zui-color-foreground);
+}
+
+.ms-key[data-on="true"][data-tone="err"] {
+    background-color: color-mix(in oklab, var(--ms-tone-err) 14%, transparent);
+    color: var(--ms-tone-err);
+}
+
+.ms-key[data-on="true"][data-tone="warn"] {
+    background-color: color-mix(in oklab, var(--ms-tone-warn) 14%, transparent);
+    color: var(--ms-tone-warn);
+}
+
+.ms-key[data-disabled="true"] {
+    opacity: 0.38;
+    cursor: default;
+}
+
+.ms-key[data-disabled="true"]:hover {
+    background-color: transparent;
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-key__dot {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--zui-color-primary);
+}
+
+/* The mark that turns while the window waits. The turn is linear, because it repeats. */
+.ms-busy {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    color: var(--zui-color-primary);
+    transform: rotate(0deg);
+    animation: ms-busy-turn 800ms linear infinite;
+}
+
+@keyframes ms-busy-turn {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* The label that follows the pointer while a client is dragged onto a channel. */
+.ms-ghost {
+    position: absolute;
+    z-index: 10;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: 1px solid var(--zui-color-border);
+    border-radius: var(--ms-radius);
+    background-color: var(--zui-color-popover);
+    color: var(--zui-color-popover-foreground);
+    box-shadow: var(--zui-shadow-md);
+    font-size: var(--zui-type-size-xs);
+    white-space: nowrap;
+    pointer-events: none;
+}
+
+.ms-ghost__to {
+    color: var(--zui-color-primary);
+}

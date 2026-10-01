@@ -55,6 +55,10 @@ impl<T> Clone for Handoff<T> {
     }
 }
 
+#[cfg_attr(
+    not(target_os = "macos"),
+    expect(dead_code, reason = "only the macOS system picker hands a value over")
+)]
 impl<T> Handoff<T> {
     pub fn new(value: T) -> Self {
         Self(std::sync::Arc::new(std::sync::Mutex::new(Some(value))))

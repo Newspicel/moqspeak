@@ -1,0 +1,177 @@
+/* The page the window shows while it holds no server: a centred column with the connect field
+   and the saved servers. */
+
+.ms-home {
+    flex: 1 1 0;
+    min-height: 0;
+}
+
+.ms-home__center {
+    align-items: center;
+    width: 100%;
+}
+
+.ms-home__column {
+    gap: var(--zui-space-xl);
+    width: 100%;
+    max-width: var(--ms-home);
+    padding: 72px var(--zui-space-lg) var(--zui-space-xl);
+}
+
+.ms-home__brand {
+    gap: 2px;
+}
+
+.ms-home__name {
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-lg);
+    font-weight: 600;
+}
+
+.ms-home__tagline {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+/* The connect field: two lines in one frame, a label column and the text. */
+.ms-connect {
+    border: 1px solid var(--zui-color-border);
+    border-radius: var(--ms-radius);
+    overflow: hidden;
+}
+
+.ms-connect__line {
+    align-items: center;
+    height: 38px;
+}
+
+.ms-connect__line + .ms-connect__line {
+    border-top: 1px solid var(--zui-color-border);
+}
+
+.ms-connect__label {
+    flex: 0 0 96px;
+    padding: 0 var(--zui-space-md);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-connect .ms-connect__input {
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    height: 100%;
+    padding: 0 var(--zui-space-md) 0 0;
+    border: none;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--zui-color-foreground);
+    font-size: var(--zui-type-size-sm);
+}
+
+.ms-connect .ms-connect__input:focus-visible {
+    border: none;
+    box-shadow: none;
+}
+
+.ms-home__actions {
+    align-items: center;
+    gap: var(--zui-space-sm);
+    margin-top: calc(var(--zui-space-xl) * -1 + var(--zui-space-md));
+}
+
+.ms-home__status {
+    flex: 1 1 0;
+    align-items: center;
+    gap: var(--zui-space-sm);
+    min-width: 0;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-home__status[data-tone="err"] {
+    color: var(--ms-tone-err);
+}
+
+.ms-home__status-text {
+    min-width: 0;
+    overflow-wrap: break-word;
+}
+
+/* An outline in the border tone with the word in the primary tone. */
+.zui-button.ms-accent-key {
+    height: 28px;
+    padding: 0 var(--zui-space-md);
+    border: 1px solid var(--zui-color-border);
+    background-color: transparent;
+    box-shadow: none;
+    color: var(--zui-color-primary);
+    font-size: 13px;
+    --zui-button-lift: 0 0 transparent;
+}
+
+.zui-button.ms-accent-key:hover {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 10%, transparent);
+}
+
+/* The saved servers. */
+.ms-servers {
+    gap: 2px;
+}
+
+.ms-servers__title {
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 var(--zui-space-sm);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-servers__row {
+    align-items: center;
+    gap: var(--zui-space-md);
+    height: 32px;
+    padding: 0 var(--zui-space-xs) 0 var(--zui-space-md);
+    border-radius: var(--zui-radius-md);
+    cursor: pointer;
+}
+
+.ms-servers__row:hover {
+    background-color: var(--zui-color-secondary);
+}
+
+.ms-servers__label {
+    flex: 0 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-servers__address {
+    flex: 1 1 0;
+    min-width: 0;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-servers__row .ms-key {
+    width: 24px;
+    height: 24px;
+    opacity: 0;
+}
+
+.ms-servers__row:hover .ms-key {
+    opacity: 1;
+}
+
+.ms-servers__empty {
+    padding: 0 var(--zui-space-sm);
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}

@@ -1,0 +1,80 @@
+/* The menus and lists the application opens: context menus, dropdown menus and select lists.
+   Each lights the row under the pointer or the keys with the menu hover tone of the theme. */
+
+.zui-menu,
+.zui-select__list,
+.zui-native-select__list {
+    --zui-color-accent: var(--ms-menu-hover);
+}
+
+/* A row of a menu or a list popup is one menu row tall, with its text one step under the text
+   of a control. */
+.zui-menu .zui-menu__item,
+.zui-menu .zui-menu__label,
+.zui-select__list .zui-select__item,
+.zui-native-select__list .zui-native-select__option {
+    min-height: var(--ms-menu-row);
+    padding-top: 4px;
+    padding-bottom: 4px;
+    font-size: var(--ms-menu-text);
+    line-height: 16px;
+}
+
+.zui-menu .zui-menu__item,
+.zui-menu .zui-menu__label {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+.zui-menu .zui-menu__label {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+    font-weight: var(--zui-type-weight-normal);
+}
+
+.zui-menu .zui-menu__item--check,
+.zui-menu .zui-menu__item--inset,
+.zui-menu .zui-menu__label--inset {
+    padding-left: 26px;
+}
+
+.zui-menu .zui-menu__indicator {
+    left: 7px;
+}
+
+.zui-select__list .zui-select__item,
+.zui-native-select__list .zui-native-select__option {
+    padding-left: 8px;
+    padding-right: 28px;
+}
+
+.zui-menu .zui-menu__shortcut {
+    font-size: var(--zui-type-size-xs);
+    letter-spacing: 0;
+}
+
+/* A menu row with a mark before its word. */
+.ms-menu-row {
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.ms-menu-row .ms-dot {
+    width: 6px;
+    height: 6px;
+}
+
+.ms-menu-row__text {
+    flex: 1 1 auto;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-menu-row__hint {
+    flex: 0 0 auto;
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}

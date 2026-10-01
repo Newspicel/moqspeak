@@ -16,12 +16,11 @@ Cloudflare Worker keeps track of servers, channels and who is where.
   suppression (RNNoise) and a neural speech detector that opens the microphone only for your
   voice. Push-to-talk and continuous transmission are available too.
 - **Screen sharing.** On macOS, Apple's picker lets you share a single window, an app or a display.
-  On Linux and Windows a display is shared. Viewers watch in the side panel or in a separate
-  window. Video is AV1.
+  On Linux and Windows a display is shared. Viewers watch in a separate window. Video is AV1.
 - **Roles.** Users, moderators and admins. The first person on a new server becomes its admin.
-- **Per-user controls.** Local volume (0–200 %) and local mute for everyone you hear.
-- **Your devices.** Choose microphone and speakers in Options; changes apply immediately.
-- **Light, dark or system theme.**
+- **Per-user controls.** Local volume (0–200 %) and local mute for everyone you hear, from their menu.
+- **Your devices.** Choose microphone and speakers in Settings; changes apply immediately.
+- **Themes.** Jellybeans and 25 other palettes, each at a light and a dark surface.
 
 ## Install
 
@@ -39,7 +38,7 @@ time you share.
 
 ## Using moqspeak
 
-Open **Connections → Connect** and enter a server address such as
+Enter a server address on the start page, such as
 `moq.newspicel.dev/public`. The part after the slash is the server's name. Any name
 works, and a new name creates a new server with a default set of channels.
 
@@ -50,8 +49,11 @@ works, and a new name creates a new server with a default set of channels.
 | Talk with push-to-talk | Hold F1, or `` ` `` while not typing |
 | Message someone | Double-click them |
 | Poke, mute locally, kick, change role | Right-click them |
-| Share your screen | **Share screen** in the toolbar |
-| Change devices, voice detection, theme | **Tools → Options** |
+| Mute, sound off, away | The keys in the pill at the foot of the channel list |
+| Show the chat or the log | The keys at the top right |
+| Switch servers, save one | The server name at the top left |
+| Share your screen | The screen key in the pill |
+| Change devices, voice detection, theme | The settings key in the pill |
 
 **Roles.** Moderators can create and edit channels, move people and kick them from a channel.
 Admins can also delete channels and give or take roles. Each installation has its own
