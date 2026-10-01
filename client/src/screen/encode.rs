@@ -127,25 +127,35 @@ pub struct Sharer {
 impl Sharer {
     /// Captures monitor `id` and hands encoded frames to `sink`.
     pub fn start(id: u32, sink: impl Fn(VideoFrame) + Send + 'static) -> Result<Self> {
-        let monitor = xcap::Monitor::all()
-            .context("listing monitors")?
-            .into_iter()
-            .find(|m| m.id().ok() == Some(id))
-            .ok_or_else(|| anyhow!("that monitor is gone"))?;
-        // Capture once up front so a missing permission is reported to the caller.
-        let first = monitor
-            .capture_image()
-            .map_err(|e| anyhow!("screen capture failed: {e}"))?;
-        let (tw, th) = target_size(first.width() as usize, first.height() as usize);
         let stop = Arc::new(AtomicBool::new(false));
         let flag = stop.clone();
+        // `xcap::Monitor` is not `Send` on every platform, so the monitor is found and opened on
+        // the capture thread itself; the first capture's outcome comes back to the caller.
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel::<Result<()>>();
         std::thread::Builder::new()
             .name("screen-share".into())
             .spawn(move || {
-                let mut encoder = match Encoder::new(tw, th, 10) {
-                    Ok(e) => e,
+                let opened = (|| {
+                    let monitor = xcap::Monitor::all()
+                        .context("listing monitors")?
+                        .into_iter()
+                        .find(|m| m.id().ok() == Some(id))
+                        .ok_or_else(|| anyhow!("that monitor is gone"))?;
+                    // Capture once up front so a missing permission is reported to the caller.
+                    let first = monitor
+                        .capture_image()
+                        .map_err(|e| anyhow!("screen capture failed: {e}"))?;
+                    let (tw, th) = target_size(first.width() as usize, first.height() as usize);
+                    let encoder = Encoder::new(tw, th, 10)?;
+                    anyhow::Ok((monitor, encoder))
+                })();
+                let (monitor, mut encoder) = match opened {
+                    Ok(pair) => {
+                        let _ = ready_tx.send(Ok(()));
+                        pair
+                    }
                     Err(e) => {
-                        tracing::error!("{e:#}");
+                        let _ = ready_tx.send(Err(e));
                         return;
                     }
                 };
@@ -175,6 +185,9 @@ impl Sharer {
                 }
             })
             .context("starting the capture thread")?;
+        ready_rx
+            .recv_timeout(Duration::from_secs(10))
+            .map_err(|_| anyhow!("the screen did not open in time"))??;
         Ok(Self { stop })
     }
 }
