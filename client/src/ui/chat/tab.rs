@@ -1,7 +1,8 @@
 //! One conversation in the chat head: its name, an unread mark, and for a private one a cross.
 
 use zgui::prelude::*;
-use zgui::reactive::LocalStorage;
+use zgui::reactive::{LocalStorage, RenderEffect};
+use zgui::view::{ScrollBehavior, ScrollTarget};
 use zgui::vocab::SharedString;
 
 use crate::ui::parts::icons::{self, IconProps, IconSize};
@@ -18,10 +19,19 @@ pub fn ChatTab(
     let active = move || state.chat.with(|c| c.current == conversation);
     let unread = move || state.chat.with(|c| c.unread.contains(&conversation));
     let closable = matches!(conversation, Conversation::Private(_));
+    // The tab that shows its conversation stands in view of the scrolling row.
+    let node = NodeRef::new();
+    let reveal = RenderEffect::new(move |_| {
+        if active() && node.get().is_some() {
+            node.scroll_to(ScrollTarget::IntoView, ScrollBehavior::Instant);
+        }
+    });
+    on_cleanup_local(move || drop(reveal));
 
     view! {
         control(
             class = "ms-chat-tab",
+            node_ref = node,
             attr:data-active = move || active().then(|| "true".to_owned()),
             tabindex = Focus::Sequential,
             a11y:role = Role::Tab,

@@ -2,6 +2,7 @@
 //!
 //! It joins the server, moves to the named channel, beeps a short tone every two seconds over
 //! MoQ, and prints who it hears. With `--share-pattern` it also shares a moving test pattern.
+//! With `--wander` it joins the next channel every few seconds.
 
 use std::f32::consts::TAU;
 use std::sync::Arc;
@@ -18,8 +19,9 @@ pub fn run(args: &[String]) {
         .cloned()
         .unwrap_or_else(|| crate::ui::state::DEFAULT_ADDRESS.into());
     let nickname = args.get(1).cloned().unwrap_or_else(|| "BeepBot".into());
-    let channel = args.get(2).cloned();
+    let channel = args.get(2).filter(|a| !a.starts_with("--")).cloned();
     let share = args.iter().any(|a| a == "--share-pattern");
+    let wander = args.iter().any(|a| a == "--wander");
 
     let (packet_tx, packet_rx) = tokio::sync::mpsc::unbounded_channel();
     let audio = Arc::new(Audio::headless());
@@ -66,7 +68,18 @@ pub fn run(args: &[String]) {
     engine.send(Command::Connect { address, nickname });
     let mut joined = false;
     let mut names = std::collections::HashMap::new();
+    let mut rooms: Vec<u64> = Vec::new();
+    let mut moved = Instant::now();
+    let mut next_room = 0;
     while let Some(event) = events.blocking_recv() {
+        // The beeps wake this loop every two seconds, which is clock enough for a stroll.
+        if wander && !rooms.is_empty() && moved.elapsed() >= Duration::from_secs(3) {
+            next_room = (next_room + 1) % rooms.len();
+            engine.send(Command::Send(ClientMsg::Join {
+                channel: rooms[next_room],
+            }));
+            moved = Instant::now();
+        }
         match event {
             Event::State {
                 channels, clients, ..
@@ -74,6 +87,7 @@ pub fn run(args: &[String]) {
                 for c in &clients {
                     names.insert(c.id, c.name.clone());
                 }
+                rooms = channels.iter().map(|c| c.id).collect();
                 if !joined && share {
                     engine.send(Command::StartShare {
                         monitor: crate::engine::TEST_PATTERN,

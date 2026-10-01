@@ -10,7 +10,9 @@ use zgui_ui::prelude::*;
 
 use crate::model::ClientId;
 use crate::ui::chat::composer::ComposerProps;
+use crate::ui::chat::grip::ChatGripProps;
 use crate::ui::chat::message::{MessageLineProps, starts_run};
+use crate::ui::chat::strip::TabStripProps;
 use crate::ui::chat::tab::ChatTabProps;
 use crate::ui::parts::icons;
 use crate::ui::parts::{KeyProps, press};
@@ -63,16 +65,21 @@ pub fn ChatPanel(
             .filter(|t| !t.is_empty())
     };
     let close = Rc::new(move || state.chat.update(|c| c.toggle()));
+    let resizing = RwSignal::new_local(false);
+    let width = move || Some(format!("{}px", state.chat_width.get()));
 
     view! {
         column(
             class = "ms-chat",
             attr:data-open = move || open.get().then(|| "true".to_owned()),
+            attr:data-resizing = move || resizing.get().then(|| "true".to_owned()),
+            style:width = move || if open.get() { width() } else { Some("0px".to_owned()) },
             a11y:hidden = move || !open.get()
         ) {
-            column(class = "ms-chat__inner") {
+            ChatGrip(resizing = resizing)
+            column(class = "ms-chat__inner", style:width = width) {
                 row(class = "ms-chat__head", on:pointer_down = press::move_window()) {
-                    row(class = "ms-chat__tabs", a11y:role = Role::TabList, a11y:label = "Conversations") {
+                    TabStrip {
                         ChatTab(conversation = Conversation::Channel, title = channel_title)
                         ChatTab(conversation = Conversation::Server, title = Signal::stored_local("Server".to_owned()))
                         for entry in move || state.chat.with(|c| c.direct.clone()), key = |t: &(ClientId, String)| t.clone() {

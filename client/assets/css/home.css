@@ -75,6 +75,11 @@
     box-shadow: none;
 }
 
+.ms-connect .ms-connect__input:empty::before {
+    left: 0;
+    right: 0;
+}
+
 .ms-home__actions {
     align-items: center;
     gap: var(--zui-space-sm);

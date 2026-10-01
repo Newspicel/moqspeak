@@ -3,6 +3,8 @@
 
 :root {
     --ms-quick: 90ms;
+    /* A row that changes place: long enough to follow, short enough to stay out of the way. */
+    --ms-glide: 120ms;
     --ms-instant: 60ms;
     --ms-ease: cubic-bezier(0.2, 0, 0, 1);
     --ms-pulse: 1600ms;

@@ -21,7 +21,6 @@
     --ms-bar: 40px;
     --ms-keys: 96px;
     --ms-key: 28px;
-    --ms-chat: 360px;
     --ms-log: 180px;
     --ms-strip: 30px;
     --ms-pill: 40px;
@@ -29,7 +28,6 @@
 
     /* One row of the channel tree. `ROW` in Rust holds the same length. */
     --ms-row: 28px;
-    --ms-indent: 22px;
     /* A row of a menu or a list popup, and the text on it. */
     --ms-menu-row: 24px;
     --ms-menu-text: 13px;

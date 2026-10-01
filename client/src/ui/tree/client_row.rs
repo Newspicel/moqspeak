@@ -10,7 +10,7 @@ use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{StatusDotProps, TagProps};
 use crate::ui::state::{AppState, ClientRow, Drag, Selection};
 use crate::ui::tree::client_menu::ClientMenuProps;
-use crate::ui::tree::view::indent;
+use crate::ui::tree::view::{CLIENT_INSET, indent, px};
 
 /// The tone of a client's mark: speaking, away or quiet.
 pub fn voice_tone(talking: bool, away: bool) -> &'static str {
@@ -49,7 +49,7 @@ pub fn ClientLine(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                     class = "ms-row ms-row--client",
                     attr:data-selected = move || (state.selected.get() == Selection::Client(id)).then(|| "true".to_owned()),
                     attr:data-away = move || row.with(|r| r.away).then(|| "true".to_owned()),
-                    style:padding-left = move || indent(row.with(|r| r.depth)),
+                    style:padding-left = move || px(indent(row.with(|r| r.depth)) + CLIENT_INSET),
                     tabindex = Focus::Sequential,
                     a11y:role = Role::TreeItem,
                     a11y:label = move || SharedString::from(row.with(|r| r.name.clone())),

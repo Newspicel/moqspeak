@@ -8,6 +8,11 @@ use crate::ui::theme::{Scheme, Variant};
 /// The server a new installation offers.
 pub const DEFAULT_ADDRESS: &str = "moq.newspicel.dev/public";
 
+/// How wide the chat column opens at first, and the range a drag keeps it in, in CSS pixels.
+pub const CHAT_WIDTH: f32 = 360.0;
+pub const CHAT_MIN: f32 = 260.0;
+pub const CHAT_MAX: f32 = 720.0;
+
 /// A saved server.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Bookmark {
@@ -36,6 +41,8 @@ pub struct Settings {
     pub noise_suppression: bool,
     pub smart_vad: bool,
     pub echo_cancellation: bool,
+    /// How wide the chat column stands open, in CSS pixels.
+    pub chat_width: f32,
 }
 
 impl Default for Settings {
@@ -62,6 +69,7 @@ impl Default for Settings {
             noise_suppression: true,
             smart_vad: true,
             echo_cancellation: true,
+            chat_width: CHAT_WIDTH,
         }
     }
 }

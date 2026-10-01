@@ -10,7 +10,7 @@ use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::press;
 use crate::ui::state::{AppState, ChannelRow, Selection};
 use crate::ui::tree::channel_menu::ChannelMenuProps;
-use crate::ui::tree::view::indent;
+use crate::ui::tree::view::{indent, px};
 
 /// A channel row. A double press or Enter joins it; the arrows fold it.
 #[component]
@@ -35,7 +35,7 @@ pub fn ChannelLine(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
                     attr:data-selected = move || (state.selected.get() == Selection::Channel(id)).then(|| "true".to_owned()),
                     attr:data-mine = move || row.with(|r| r.mine).then(|| "true".to_owned()),
                     attr:data-drop = move || (state.dragging() && state.drop_target.get() == Some(id)).then(|| "true".to_owned()),
-                    style:padding-left = move || indent(row.with(|r| r.depth)),
+                    style:padding-left = move || px(indent(row.with(|r| r.depth))),
                     tabindex = Focus::Sequential,
                     a11y:role = Role::TreeItem,
                     a11y:label = move || SharedString::from(row.with(|r| r.name.clone())),

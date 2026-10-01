@@ -6,6 +6,7 @@ use zgui::reactive::LocalStorage;
 use zgui_ui::prelude::*;
 
 use crate::audio::VoiceMode;
+use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{StatusDotProps, act, press};
 use crate::ui::state::AppState;
 
@@ -49,13 +50,18 @@ pub fn SelfMenu() -> impl IntoView {
                     VoiceMode::Continuous => "Continuous transmission",
                 }}}
                 MenuItem(on_select = act(move || state.set_away(!state.away.get_untracked()))) {
-                    {move || if state.away.get() { "Back from away" } else { "Set away" }}
+                    Icon(svg = icons::MOON, size = IconSize::Sm)
+                    text {{move || if state.away.get() { "Back from away" } else { "Set away" }}}
                 }
                 MenuItem(on_select = act(move || state.set_loopback(!state.loopback.get_untracked()))) {
-                    {move || if state.loopback.get() { "Stop hearing myself" } else { "Hear myself" }}
+                    Icon(svg = icons::EAR, size = IconSize::Sm)
+                    text {{move || if state.loopback.get() { "Stop hearing myself" } else { "Hear myself" }}}
                 }
                 MenuSeparator()
-                MenuItem(destructive = true, on_select = act(move || state.disconnect())) {"Disconnect"}
+                MenuItem(destructive = true, on_select = act(move || state.disconnect())) {
+                    Icon(svg = icons::UNPLUG, size = IconSize::Sm)
+                    text {"Disconnect"}
+                }
             }
         }
     }

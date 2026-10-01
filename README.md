@@ -112,6 +112,7 @@ cp -R dist/moqspeak.app /Applications/
 
 For testing with one machine, start a headless participant. It joins a channel, beeps every two
 seconds and prints whom it hears. With `--share-pattern` it also shares a moving test pattern.
+With `--wander` it joins the next channel every few seconds.
 
 ```sh
 cargo run -p moqspeak -- --bot moq.newspicel.dev/demo BeepBot Lobby --share-pattern

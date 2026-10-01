@@ -78,3 +78,17 @@
     color: var(--zui-color-muted-foreground);
     font-size: var(--zui-type-size-xs);
 }
+
+/* A mark before a row's word: quiet at rest, the row's tone under the pointer or the keys. */
+.zui-menu .zui-menu__item .ms-icon {
+    color: var(--zui-color-muted-foreground);
+}
+
+.zui-menu .zui-menu__item:hover .ms-icon,
+.zui-menu .zui-menu__item:focus .ms-icon {
+    color: inherit;
+}
+
+.zui-menu .zui-menu__item--destructive .ms-icon {
+    color: var(--zui-color-destructive);
+}

@@ -24,12 +24,29 @@ fn facts(state: AppState) -> AnyView {
     view! {
         column(class = "ms-server-facts") {
             text(class = "ms-server-facts__title") {{state.server_label()}}
-            text(class = "ms-server-facts__line") {{address}}
-            text(class = "ms-server-facts__line") {{format!("{online} online · {channels} channels{since}")}}
-            text(class = "ms-server-facts__line") {{voice}}
+            row(class = "ms-server-facts__line") {
+                Icon(svg = icons::GLOBE, size = IconSize::Xs)
+                text {{address}}
+            }
+            row(class = "ms-server-facts__line") {
+                Icon(svg = icons::USERS, size = IconSize::Xs)
+                text {{format!("{online} online · {channels} channels{since}")}}
+            }
+            row(class = "ms-server-facts__line") {
+                Icon(svg = icons::AUDIO_LINES, size = IconSize::Xs)
+                text {{voice}}
+            }
         }
     }
     .any()
+}
+
+/// Puts the server address on the clipboard.
+fn copy_address(state: AppState) {
+    if let Some(clipboard) = try_use_clipboard() {
+        let address = state.settings.with_untracked(|s| s.address.clone());
+        clipboard.set_text(ClipboardKind::Standard, address);
+    }
 }
 
 /// A duration in its largest unit.
@@ -91,10 +108,24 @@ pub fn ServerMenu() -> impl IntoView {
                 MenuSeparator()
                 MenuLabel {"Servers"}
                 {state.settings.with_untracked(|s| s.bookmarks.clone()).into_iter().map(|b| bookmark_item(state, b)).collect::<Vec<_>>()}
-                MenuItem(on_select = act(move || state.modal.set(Modal::Connect))) {"Connect to…"}
-                MenuItem(disabled = saved(), on_select = act(move || state.add_bookmark())) {"Save server"}
                 MenuSeparator()
-                MenuItem(destructive = true, on_select = act(move || state.disconnect())) {"Disconnect"}
+                MenuItem(on_select = act(move || state.modal.set(Modal::Connect))) {
+                    Icon(svg = icons::PLUG, size = IconSize::Sm)
+                    text {"Connect to…"}
+                }
+                MenuItem(disabled = saved(), on_select = act(move || state.add_bookmark())) {
+                    Icon(svg = icons::STAR, size = IconSize::Sm)
+                    text {"Save server"}
+                }
+                MenuItem(on_select = act(move || copy_address(state))) {
+                    Icon(svg = icons::COPY, size = IconSize::Sm)
+                    text {"Copy address"}
+                }
+                MenuSeparator()
+                MenuItem(destructive = true, on_select = act(move || state.disconnect())) {
+                    Icon(svg = icons::UNPLUG, size = IconSize::Sm)
+                    text {"Disconnect"}
+                }
             }
         }
     }

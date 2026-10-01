@@ -11,6 +11,30 @@
     padding: var(--zui-space-xs) 0 calc(var(--ms-pill) + 32px);
 }
 
+/* The rows stand on this field, each at its place. The field grows and shrinks with them. */
+.ms-tree__field {
+    position: relative;
+    flex: 0 0 auto;
+    transition: height var(--ms-glide) var(--ms-ease);
+}
+
+/* One row's place. It glides to a new place, and fades in where a row appears. */
+.ms-slot {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--ms-row);
+    transform: translate(0px, 0px);
+    transition: transform var(--ms-glide) var(--ms-ease);
+    animation: ms-slot-in var(--ms-glide) var(--ms-ease);
+}
+
+@keyframes ms-slot-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
 .ms-row {
     display: flex;
     align-items: center;

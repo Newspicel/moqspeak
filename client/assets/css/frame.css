@@ -29,6 +29,12 @@
     height: 100%;
 }
 
+/* macOS draws its own window buttons at the leading corner, so the trailing edge keeps no room
+   for keys. */
+.ms-frame[data-platform="macos"] {
+    --ms-keys: var(--zui-space-sm);
+}
+
 .ms-stage {
     position: relative;
     flex: 1 1 0;

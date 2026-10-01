@@ -40,7 +40,7 @@ Voice chat client in the style of TeamSpeak. Rust, zgui, Media over QUIC. The co
 - Status marks are CSS dots with tone tokens, never icons.
 - Icons: lucide SVGs vendored in `client/assets/icons/`, referenced through `icons::NAME` constants. Stroke only, `currentColor`, untransformed.
 - Row height is one constant in Rust and one `--ms-row` variable in CSS.
-- Motion: CSS transitions and keyframes under 120 ms, motion tokens only. No timer-driven animation.
+- Motion: CSS transitions and keyframes of 120 ms or less, motion tokens only. No timer-driven animation.
 - Compact and flat: planes differ by tone, borders only on floating surfaces.
 
 ## Verify

@@ -2,6 +2,7 @@
    show. The inner column keeps its width, so the words never reflow while the column moves. */
 
 .ms-chat {
+    position: relative;
     flex: 0 0 auto;
     width: 0;
     height: 100%;
@@ -11,13 +12,13 @@
     transition: width var(--ms-quick) var(--ms-ease);
 }
 
-.ms-chat[data-open="true"] {
-    width: var(--ms-chat);
+/* The edge follows the pointer at once while it is dragged. */
+.ms-chat[data-resizing="true"] {
+    transition: none;
 }
 
 .ms-chat__inner {
     flex: 0 0 auto;
-    width: var(--ms-chat);
     height: 100%;
     min-height: 0;
 }
@@ -31,20 +32,58 @@
     padding: 0 var(--ms-keys) 0 var(--zui-space-sm);
 }
 
-.ms-chat__tabs {
+/* The tabs keep a readable width and the row scrolls sideways when they run out of room. The
+   scrolling row is taller than the frame around it: the engine draws its bar in the extra height,
+   and the frame clips that height away. */
+.ms-strip {
+    position: relative;
     flex: 1 1 0;
-    align-items: center;
-    gap: 2px;
     min-width: 0;
+    height: 24px;
     overflow: hidden;
+}
+
+.ms-strip__scroll {
+    align-items: flex-start;
+    gap: 2px;
+    width: 100%;
+    height: 48px;
+    overflow-x: scroll;
+    overflow-y: hidden;
+}
+
+/* Where more tabs wait past an edge, the row fades out into the head. */
+.ms-strip__fade {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 24px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--ms-quick) var(--ms-ease);
+}
+
+.ms-strip__fade[data-edge="start"] {
+    left: 0;
+    background-image: linear-gradient(to right, var(--zui-color-sidebar), transparent);
+}
+
+.ms-strip__fade[data-edge="end"] {
+    right: 0;
+    background-image: linear-gradient(to left, var(--zui-color-sidebar), transparent);
+}
+
+.ms-strip__fade[data-shown="true"] {
+    opacity: 1;
 }
 
 .ms-chat-tab {
     display: flex;
-    flex: 0 1 auto;
+    flex: 0 0 auto;
     align-items: center;
+    justify-content: center;
     gap: 6px;
-    min-width: 0;
+    min-width: 64px;
     max-width: 160px;
     height: 24px;
     padding: 0 8px;
@@ -195,11 +234,11 @@
     flex: 0 0 auto;
     align-items: center;
     gap: var(--zui-space-sm);
-    height: 34px;
+    height: 36px;
     margin: 0 var(--zui-space-md) var(--zui-space-md);
-    padding: 0 var(--zui-space-sm) 0 var(--zui-space-md);
+    padding: 0 4px 0 var(--zui-space-md);
     border: 1px solid var(--zui-color-border);
-    border-radius: var(--zui-radius-md);
+    border-radius: calc(var(--ms-radius) + 2px);
     color: var(--zui-color-muted-foreground);
 }
 
@@ -221,4 +260,58 @@
 .ms-composer .ms-composer__input:focus-visible {
     border: none;
     box-shadow: none;
+}
+
+.ms-composer .ms-composer__input:empty::before {
+    left: 0;
+    right: 0;
+}
+
+/* The send key: a ghost inside the field. It takes the accent once there is something to send. */
+.ms-composer .ms-composer__send {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--ms-radius);
+}
+
+.ms-composer .ms-composer__send[data-on="true"] {
+    background-color: transparent;
+    color: var(--zui-color-primary);
+}
+
+.ms-composer .ms-composer__send[data-on="true"]:hover {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 12%, transparent);
+}
+
+/* The grip on the leading edge: a strip wide enough to take, with a line drawn under the pointer
+   and while it is held. */
+.ms-chat__grip {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 2;
+    width: 6px;
+    cursor: col-resize;
+}
+
+.ms-chat__grip::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: 2px;
+    background-color: transparent;
+    transition: background-color var(--ms-quick) var(--ms-ease);
+}
+
+.ms-chat__grip:hover::after,
+.ms-chat__grip:focus-visible::after,
+.ms-chat[data-resizing="true"] .ms-chat__grip::after {
+    background-color: color-mix(in oklab, var(--zui-color-primary) 60%, transparent);
+}
+
+.ms-chat__grip:focus-visible {
+    outline: none;
 }

@@ -97,5 +97,8 @@
 }
 
 .ms-server-facts__line {
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
     font-variant-numeric: tabular-nums;
 }

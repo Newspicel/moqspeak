@@ -14,7 +14,7 @@ use crate::ui::state::log::{Log, Tone};
 use crate::ui::state::modal::Modal;
 use crate::ui::state::note::Note;
 use crate::ui::state::pointer::{Drag, Selection};
-use crate::ui::state::settings::{Settings, mode_from_str};
+use crate::ui::state::settings::{CHAT_MAX, CHAT_MIN, Settings, mode_from_str};
 use crate::ui::theme::{Scheme, Variant};
 
 /// Every signal the interface reads. Provided as local context at the root.
@@ -46,6 +46,8 @@ pub struct AppState {
     pub scheme: RwSignal<Scheme>,
     pub variant: RwSignal<Variant>,
     pub sharing: RwSignal<bool>,
+    /// How wide the chat column stands open, in CSS pixels.
+    pub chat_width: RwSignal<f32>,
     pub drag: RwSignal<Option<Drag>>,
     pub drop_target: RwSignal<Option<ChannelId>>,
     pub pointer: RwSignal<(f32, f32)>,
@@ -64,6 +66,7 @@ impl AppState {
     pub fn new(engine: Engine) -> Self {
         let settings = Settings::load();
         let mode = mode_from_str(&settings.voice_mode);
+        let chat_width = settings.chat_width.clamp(CHAT_MIN, CHAT_MAX);
         let audio = &engine.audio.shared;
         audio.set_mode(mode);
         audio.threshold_db.set(settings.threshold_db);
@@ -102,6 +105,7 @@ impl AppState {
             loopback: RwSignal::new(false),
             voice_mode: RwSignal::new(mode),
             sharing: RwSignal::new(false),
+            chat_width: RwSignal::new(chat_width),
             drag: RwSignal::new(None),
             drop_target: RwSignal::new(None),
             pointer: RwSignal::new((0.0, 0.0)),

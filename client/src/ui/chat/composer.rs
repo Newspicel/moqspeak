@@ -3,10 +3,16 @@
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
-use crate::ui::parts::Erase;
+use std::rc::Rc;
+
+use zgui_ui_primitives::Placement;
+
+use crate::ui::parts::icons;
+use crate::ui::parts::{Erase, KeyProps};
 use crate::ui::state::{AppState, Conversation};
 
-/// One framed line. Enter sends what it holds to the conversation the panel shows.
+/// One framed line and a send key. Enter or the key sends what it holds to the conversation the
+/// panel shows.
 #[component]
 pub fn Composer() -> impl IntoView {
     let state = AppState::expect();
@@ -31,6 +37,9 @@ pub fn Composer() -> impl IntoView {
             .unwrap_or_else(|| "Message".into()),
     });
     let offline = Signal::derive_local(move || !state.connected());
+    let ready =
+        Signal::derive_local(move || !draft.with(|d| d.trim().is_empty()) && state.connected());
+    let press: Rc<dyn Fn()> = Rc::new(send);
 
     // The placeholder names the conversation, so the field is built again when it changes.
     view! {
@@ -47,6 +56,15 @@ pub fn Composer() -> impl IntoView {
                     }
                 }
             ) }.any()}
+            Key(
+                svg = Signal::stored_local(icons::SEND_HORIZONTAL),
+                label = Signal::stored_local("Send".to_owned()),
+                on = ready,
+                disabled = Signal::derive_local(move || !ready.get()),
+                placement = Placement::TOP,
+                class = "ms-composer__send",
+                on_press = press
+            )
         }
     }
 }
