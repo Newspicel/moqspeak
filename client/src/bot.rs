@@ -1,7 +1,7 @@
 //! A headless participant for testing: `moqspeak --bot <address> <nickname> [channel]`.
 //!
 //! It joins the server, moves to the named channel, beeps a short tone every two seconds over
-//! MoQ, and prints who it hears.
+//! MoQ, and prints who it hears. With `--share-pattern` it also shares a moving test pattern.
 
 use std::f32::consts::TAU;
 use std::sync::Arc;
@@ -19,6 +19,7 @@ pub fn run(args: &[String]) {
         .unwrap_or_else(|| crate::ui::state::DEFAULT_ADDRESS.into());
     let nickname = args.get(1).cloned().unwrap_or_else(|| "BeepBot".into());
     let channel = args.get(2).cloned();
+    let share = args.iter().any(|a| a == "--share-pattern");
 
     let (packet_tx, packet_rx) = tokio::sync::mpsc::unbounded_channel();
     let audio = Arc::new(Audio::headless());
@@ -71,6 +72,11 @@ pub fn run(args: &[String]) {
             } => {
                 for c in &clients {
                     names.insert(c.id, c.name.clone());
+                }
+                if !joined && share {
+                    engine.send(Command::StartShare {
+                        monitor: crate::engine::TEST_PATTERN,
+                    });
                 }
                 if !joined {
                     if let Some(wanted) = &channel {

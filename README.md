@@ -1,58 +1,84 @@
 # moqspeak
 
-A TeamSpeak 3 style voice client, native on [zgui](../zgui), with voice carried over
-[Media over QUIC](https://github.com/moq-dev/moq) through Cloudflare's draft-16 MoQ relay.
+**Media over QUIC Speak.** A TeamSpeak-style voice client written in Rust on
+[zgui](https://github.com/zortax/zgui). Voice and screen sharing travel over
+[Media over QUIC](https://github.com/moq-dev/moq) through Cloudflare's draft-16 MoQ relay. A
+Cloudflare Worker runs the channels, presence and chat.
 
 ```
-┌──────────────── moqspeak (Rust, zgui) ────────────────┐
-│ Menu · toolbar · server tree · info panel · chat · bar │
-│                                                        │
-│  control: WebSocket JSON ──────────► Cloudflare Worker  │  server/  (Durable Object per server:
-│                                      wss://…/s/<name>   │           channels, clients, chat, pokes)
-│  voice:  Opus 20 ms frames ────────► MoQ relay          │  draft-16.cloudflare.mediaoverquic.com
-│          moq-net, IETF draft-16      (relay 615ec116…)  │  token minted for this relay, served by
-│          one broadcast per client,                      │  the Worker in the welcome message
-│          track "audio", group/packet                    │
-└────────────────────────────────────────────────────────┘
+┌──────────────────── moqspeak (Rust, zgui) ────────────────────┐
+│ server tree · info panel · chat tabs · options · screen view  │
+│                                                               │
+│ control  JSON over WebSocket ─────► Cloudflare Worker          │  server/
+│                                     Durable Object per server  │  channels, clients, chat, pokes, moves
+│ media    one MoQ broadcast/client ► Cloudflare MoQ relay       │  draft-16.cloudflare.mediaoverquic.com
+│          track "audio":  Opus 48 kHz, a group per packet       │
+│          track "screen": AV1, a group per keyframe             │
+└───────────────────────────────────────────────────────────────┘
 ```
+
+## Features
+
+* **TeamSpeak handling.** Double-click a channel (or press Enter on it) to join. Drag a user, or
+  yourself, onto a channel to move them. Channels collapse with their arrow or ←/→. Right-click
+  for context menus (sub-channels, delete, poke, local mute, kick, move to my channel). Each
+  channel shows how many users it holds.
+* **Voice.** Opus at 40 kbit/s with in-band FEC and a per-speaker jitter buffer.
+  * Noise suppression with [nnnoiseless](https://crates.io/crates/nnnoiseless) (RNNoise).
+  * Neural speech detection with [earshot](https://crates.io/crates/earshot), combined with a
+    level threshold that you set against a live meter.
+  * Push-to-talk (hold F1, or `` ` `` outside text fields) or continuous transmission.
+  * Local volume (0–200 %) and local mute per user.
+* **Devices.** Pick the microphone and speakers in Options, or follow the system default. They
+  switch live.
+* **Screen sharing.**
+  * Captured with [xcap](https://crates.io/crates/xcap) at 15 fps and up to 1600 px wide.
+  * Encoded to AV1 with [rav1e](https://crates.io/crates/rav1e) and decoded with
+    [rav1d](https://crates.io/crates/rav1d).
+  * Each keyframe starts a new MoQ group, so a viewer who joins late starts at the latest
+    keyframe.
+  * Watch a stream in the info panel or open it in its own window.
+* **Look.** A dark theme (the default) and a light theme, avatars that ring while someone talks,
+  and [Lucide](https://lucide.dev) icons.
 
 ## Run
 
 ```sh
-cargo run -p moqspeak --release                                  # opens the client
-cargo run -p moqspeak --release -- moqspeak.newspicel.workers.dev/demo Julian   # auto-connect
+cargo run -p moqspeak --release
+cargo run -p moqspeak --release -- moqspeak.newspicel.workers.dev/demo Julian      # auto-connect
 cargo run -p moqspeak --release -- --bot moqspeak.newspicel.workers.dev/demo BeepBot Lobby
+cargo run -p moqspeak --release -- --bot moqspeak.newspicel.workers.dev/demo Tv Lobby --share-pattern
 ```
 
-The address is `<worker host>/<server name>`. Every server name is its own virtual server with
-its own channel tree (seeded with Lobby, Gaming → Counter-Strike/Minecraft/…, AFK, …).
-`--bot` runs a headless participant that beeps every two seconds and prints who it hears, which
-is handy for testing with one machine.
+The address is `<worker host>/<server name>`. Each server name is its own virtual server with its
+own channel tree. `--bot` runs a headless participant that beeps every two seconds and prints who
+it hears. `--share-pattern` also makes it share a moving test pattern.
 
-### In the client
+On macOS, grant microphone access, and Screen Recording access for sharing, when asked. Settings
+live in the platform config directory (`~/Library/Application Support/dev.moqspeak.moqspeak/` on
+macOS).
 
-* **Double-click a channel** to switch to it. You hear everyone in your channel.
-* **Double-click a client** (or right-click → Send Text Message) for a private chat tab.
-* **Right-click** for TS3-style context menus: create sub-channel, delete channel, poke, mute
-  locally, kick from channel.
-* **Toolbar**: connect, disconnect, connect to the public bookmark, mute microphone, mute
-  speakers, away, create channel, options.
-* **Tools → Options**: voice activation with a live level meter and threshold, push-to-talk
-  (hold **F1**, or **`** outside text fields, or the toolbar button), continuous transmission,
-  microphone gain, and output volume.
-* **Tools → Microphone test** plays your own voice back to you.
-* Each client in the info panel has a local volume slider (0–200 %).
-* Settings and bookmarks are stored in `~/Library/Application Support/dev.moqspeak.moqspeak/`.
+The build needs the nightly toolchain pinned in `rust-toolchain.toml` (zgui requires it), plus
+`cmake` and `nasm`. libopus and the AV1 assembly are built from source.
+
+## Releases
+
+`.github/workflows/build.yml` builds and tests on Linux, macOS (arm64) and Windows for every
+push. Push a `v*` tag to publish a GitHub release with:
+
+* `moqspeak-linux-x86_64.tar.gz`
+* `moqspeak-macos-arm64.zip` (an ad-hoc signed `moqspeak.app`)
+* `moqspeak-windows-x86_64.zip`
 
 ## Layout
 
 | Path | What |
 |---|---|
-| `client/src/audio.rs` | cpal capture/playback, VAD/PTT gate, Opus encode, per-speaker jitter buffer + mixer |
-| `client/src/media.rs` | MoQ publish/subscribe with `moq-tokio`/`moq-net` (two QUIC sessions: publish, subscribe) |
-| `client/src/engine.rs` | tokio runtime: control WebSocket, subscription sync, talking detection |
-| `client/src/model.rs` | the JSON control protocol |
-| `client/src/ui/` | zgui components (one per file) and `style.css` |
+| `client/src/audio/` | cpal devices, Opus, mixer and jitter buffer, RNNoise + earshot processing |
+| `client/src/screen/` | xcap capture, rav1e encode, rav1d decode, colour conversion, OBU fix-ups |
+| `client/src/media.rs` | MoQ publish/subscribe (`moq-tokio`/`moq-net`, IETF draft-16) |
+| `client/src/engine.rs` | tokio runtime: control WebSocket, subscriptions, sharing |
+| `client/src/ui/` | zgui components, one per file, and `style.css` |
 | `client/src/bot.rs` | the headless test participant |
 | `server/` | the Cloudflare Worker + Durable Object |
 
@@ -61,25 +87,23 @@ is handy for testing with one machine.
 ```sh
 cd server
 pnpm install
-wrangler deploy                 # deployed at https://moqspeak.newspicel.workers.dev
+wrangler deploy                 # https://moqspeak.newspicel.workers.dev
 wrangler secret put MOQ_TOKEN   # a publish+subscribe token for the MoQ relay
 ```
 
-The relay token was minted with
-`cf realtime moq relays tokens create 615ec116435c0bb9c0747dbdea2b495c --label moqspeak-worker --operations publish subscribe`
-and stored as the `MOQ_TOKEN` secret without being printed. The relay URL the client dials is
-`https://draft-16.cloudflare.mediaoverquic.com/<token>`. Cloudflare reads the token from the
-URL path and the relay ID only appears in the API.
-
-`GET /s/<name>` returns a JSON snapshot of a server, which is useful for debugging.
+Mint the relay token with
+`cf realtime moq relays tokens create <relay-id> --operations publish subscribe`. The client
+dials `https://draft-16.cloudflare.mediaoverquic.com/<token>`: Cloudflare reads the token from
+the URL path. The relay ID is only used in the API.
 
 ## Caveats
 
-* Every client that reaches the Worker receives the same relay token. That is fine for a demo.
-  Before a public deployment, mint short-lived per-session tokens from the Worker through the
-  Cloudflare API.
-* The Worker trusts its clients: anyone can create/delete channels and kick. There are no
-  permissions or server groups yet.
-* Discovery uses `SUBSCRIBE_NAMESPACE`/`PUBLISH_NAMESPACE` on the relay. A newly joined speaker is
-  heard after about one second.
+* Every client that reaches the Worker receives the same relay token. Before a public deployment,
+  have the Worker mint short-lived tokens per session through the Cloudflare API.
+* The Worker trusts its clients. Anyone can create or delete channels, move users and kick.
+  There are no permissions yet.
 * There is no echo cancellation. Use headphones or push-to-talk.
+* The screen viewer shows a keyframe within two seconds of joining, and the AV1 encoder adds
+  about four frames of latency.
+
+Icons: [Lucide](https://lucide.dev), ISC licence (`client/assets/icons/LICENSE`).

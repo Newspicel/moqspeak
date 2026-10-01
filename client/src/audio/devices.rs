@@ -55,14 +55,28 @@ pub fn list_devices() -> DeviceLists {
 fn find_device(input: bool, name: Option<&str>) -> Result<cpal::Device> {
     let host = cpal::default_host();
     if let Some(wanted) = name {
-        let mut devices = if input { host.input_devices()? } else { host.output_devices()? };
+        let mut devices = if input {
+            host.input_devices()?
+        } else {
+            host.output_devices()?
+        };
         if let Some(d) = devices.find(|d| name_of(d).as_deref() == Some(wanted)) {
             return Ok(d);
         }
         tracing::warn!("audio device \"{wanted}\" not found; using the default");
     }
-    let device = if input { host.default_input_device() } else { host.default_output_device() };
-    device.ok_or_else(|| anyhow!(if input { "no microphone found" } else { "no speakers found" }))
+    let device = if input {
+        host.default_input_device()
+    } else {
+        host.default_output_device()
+    };
+    device.ok_or_else(|| {
+        anyhow!(if input {
+            "no microphone found"
+        } else {
+            "no speakers found"
+        })
+    })
 }
 
 fn pick_config(
@@ -87,7 +101,9 @@ fn to_f32<T: cpal::SizedSample>(data: &[T]) -> Vec<f32>
 where
     f32: cpal::FromSample<T>,
 {
-    data.iter().map(|s| <f32 as cpal::FromSample<T>>::from_sample_(*s)).collect()
+    data.iter()
+        .map(|s| <f32 as cpal::FromSample<T>>::from_sample_(*s))
+        .collect()
 }
 
 fn build_input(
@@ -132,22 +148,35 @@ fn open_input(
     };
     let err = |e| tracing::warn!("input stream error: {e}");
     let stream = match format {
-        SampleFormat::F32 => {
-            device.build_input_stream(stream_config, move |d: &[f32], _: &_| handle(d.to_vec()), err, None)?
-        }
-        SampleFormat::I16 => {
-            device.build_input_stream(stream_config, move |d: &[i16], _: &_| handle(to_f32(d)), err, None)?
-        }
-        SampleFormat::I32 => {
-            device.build_input_stream(stream_config, move |d: &[i32], _: &_| handle(to_f32(d)), err, None)?
-        }
+        SampleFormat::F32 => device.build_input_stream(
+            stream_config,
+            move |d: &[f32], _: &_| handle(d.to_vec()),
+            err,
+            None,
+        )?,
+        SampleFormat::I16 => device.build_input_stream(
+            stream_config,
+            move |d: &[i16], _: &_| handle(to_f32(d)),
+            err,
+            None,
+        )?,
+        SampleFormat::I32 => device.build_input_stream(
+            stream_config,
+            move |d: &[i32], _: &_| handle(to_f32(d)),
+            err,
+            None,
+        )?,
         other => return Err(anyhow!("unsupported microphone sample format {other}")),
     };
     stream.play().context("starting microphone")?;
     Ok((stream, name))
 }
 
-fn build_output(name: Option<&str>, shared: Arc<AudioShared>, mixer: Arc<Mixer>) -> Result<(Stream, String)> {
+fn build_output(
+    name: Option<&str>,
+    shared: Arc<AudioShared>,
+    mixer: Arc<Mixer>,
+) -> Result<(Stream, String)> {
     let device = find_device(false, name)?;
     let default = device.default_output_config()?;
     let preferred = pick_config(device.supported_output_configs()?, default.clone());
@@ -168,7 +197,10 @@ fn open_output(
 ) -> Result<(Stream, String)> {
     let name = name_of(device).unwrap_or_else(|| "Speakers".into());
     if config.sample_format() != SampleFormat::F32 {
-        return Err(anyhow!("unsupported speaker sample format {}", config.sample_format()));
+        return Err(anyhow!(
+            "unsupported speaker sample format {}",
+            config.sample_format()
+        ));
     }
     let stream_config: StreamConfig = config.into();
     let channels = stream_config.channels as usize;
@@ -182,7 +214,11 @@ fn open_output(
         stream_config,
         move |data: &mut [f32], _: &_| {
             let frames = data.len() / channels;
-            let volume = if shared.deafened.load(Ordering::Relaxed) { 0.0 } else { shared.master_volume.get() };
+            let volume = if shared.deafened.load(Ordering::Relaxed) {
+                0.0
+            } else {
+                shared.master_volume.get()
+            };
             while pending.len() < frames {
                 // Mix in small codec-rate blocks so latency stays low.
                 let want = ((frames - pending.len()) as f64 * RATE as f64 / device_rate as f64)
@@ -238,7 +274,10 @@ impl DeviceThread {
         if ready_rx.recv_timeout(Duration::from_secs(5)).is_err() {
             info.lock().unwrap().error = Some("audio devices did not open in time".into());
         }
-        Self { commands: Mutex::new(tx), info }
+        Self {
+            commands: Mutex::new(tx),
+            info,
+        }
     }
 
     pub(super) fn info(&self) -> DeviceInfo {
@@ -248,7 +287,9 @@ impl DeviceThread {
     fn ask(&self, cmd: Cmd) -> DeviceInfo {
         let (reply_tx, reply_rx) = channel();
         let _ = self.commands.lock().unwrap().send((cmd, reply_tx));
-        reply_rx.recv_timeout(Duration::from_secs(5)).unwrap_or_else(|_| self.info())
+        reply_rx
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap_or_else(|_| self.info())
     }
 
     pub(super) fn set_input(&self, name: Option<String>) -> DeviceInfo {
@@ -273,7 +314,11 @@ fn run(
 ) {
     let mut input_error = None;
     let mut output_error = None;
-    let open_in = |name: Option<&str>, err: &mut Option<String>| match build_input(name, shared.clone(), frames.clone()) {
+    let open_in = |name: Option<&str>, err: &mut Option<String>| match build_input(
+        name,
+        shared.clone(),
+        frames.clone(),
+    ) {
         Ok(s) => {
             *err = None;
             Some(s)
@@ -283,7 +328,11 @@ fn run(
             None
         }
     };
-    let open_out = |name: Option<&str>, err: &mut Option<String>| match build_output(name, shared.clone(), mixer.clone()) {
+    let open_out = |name: Option<&str>, err: &mut Option<String>| match build_output(
+        name,
+        shared.clone(),
+        mixer.clone(),
+    ) {
         Ok(s) => {
             *err = None;
             Some(s)
@@ -296,7 +345,10 @@ fn run(
     let mut mic = open_in(input.as_deref(), &mut input_error);
     let mut speakers = open_out(output.as_deref(), &mut output_error);
 
-    let publish = |mic: &Option<(Stream, String)>, speakers: &Option<(Stream, String)>, ie: &Option<String>, oe: &Option<String>| {
+    let publish = |mic: &Option<(Stream, String)>,
+                   speakers: &Option<(Stream, String)>,
+                   ie: &Option<String>,
+                   oe: &Option<String>| {
         let errors: Vec<String> = [ie.clone(), oe.clone()].into_iter().flatten().collect();
         let next = DeviceInfo {
             input: mic.as_ref().map(|(_, n)| n.clone()),

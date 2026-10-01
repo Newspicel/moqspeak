@@ -10,6 +10,7 @@ use crate::engine::{ConnStatus, MediaStatus};
 use crate::model::{ChannelId, ClientId};
 use crate::ui::avatar::AvatarProps;
 use crate::ui::icons::{self, IcoProps};
+use crate::ui::screen::ScreenViewProps;
 use crate::ui::state::{AppState, Modal, Selection};
 
 fn ago(ms: u64) -> String {
@@ -130,7 +131,7 @@ fn ChannelInfo(id: ChannelId) -> impl IntoView {
                 if ch.get().is_some_and(|c| c.is_default) { "Permanent, default".to_owned() } else { "Permanent".to_owned() }
             }))
             Field(name = "Codec:", value = Signal::derive(|| "Opus Voice".to_owned()))
-            Field(name = "Media:", value = Signal::derive(|| "one MoQ broadcast per speaker, track \"audio\"".to_owned()))
+            Field(name = "Media:", value = Signal::derive(|| "a MoQ broadcast per client: audio + screen".to_owned()))
         }
         if move || ch.get().is_some_and(|c| !c.description.is_empty()) {
             column(class = "info-block") {
@@ -166,6 +167,7 @@ fn ClientInfo(id: ClientId) -> impl IntoView {
             * 100.0,
     );
     let locally_muted = move || state.local_mutes.with(|m| m.contains(&id));
+    let watching = RwSignal::new_local(true);
 
     view! {
         column(class = "banner banner-client", class:talking = talking) {
@@ -182,6 +184,31 @@ fn ClientInfo(id: ClientId) -> impl IntoView {
                     else { "Online".to_owned() }
                 } else { String::new() }
             }}}
+        }
+        if move || c.get().is_some_and(|c| c.sharing) && !me() {
+            column(class = "info-block screen-block") {
+                row(class = "screen-head") {
+                    text(class = "info-heading") {"SCREEN"}
+                    text(class = "node-live") {"LIVE"}
+                    spacer()
+                    control(class = "btn", tabindex = Focus::Sequential, on:click = move |_| watching.update(|w| *w = !*w)) {
+                        {move || if watching.get() { "Stop watching" } else { "Watch" }}
+                    }
+                    control(class = "btn btn-primary", tabindex = Focus::Sequential, on:click = move |_| {
+                        let name = c.get_untracked().map(|c| c.name).unwrap_or_default();
+                        crate::ui::screen::pop_out(state, id, name);
+                    }) {"Open in window"}
+                }
+                if move || watching.get() {
+                    ScreenView(state = state, client = id, class = "screen-frame")
+                }
+            }
+        }
+        if move || me() && state.sharing.get() {
+            column(class = "info-block") {
+                text(class = "info-heading") {"SCREEN"}
+                text(class = "info-text") {"You are sharing your screen with your channel."}
+            }
         }
         column(class = "info-fields") {
             Field(name = "Channel:", value = Signal::derive(move || {

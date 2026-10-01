@@ -1,6 +1,9 @@
 //! The icon set: Lucide (ISC licence, see `assets/icons/LICENSE`).
 
-#![allow(dead_code, reason = "the set holds icons for features that come and go")]
+#![allow(
+    dead_code,
+    reason = "the set holds icons for features that come and go"
+)]
 
 use zgui::prelude::*;
 

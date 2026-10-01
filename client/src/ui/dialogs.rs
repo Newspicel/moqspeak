@@ -26,6 +26,7 @@ pub fn Dialogs() -> impl IntoView {
                 Modal::Poke { to, name } => view! { PokeDialog(to = to, name = name) }.into_any(),
                 Modal::Poked { from, text } => view! { PokedDialog(from = from, text = text) }.into_any(),
                 Modal::About => view! { AboutDialog() }.into_any(),
+                Modal::Share { monitors } => view! { ShareDialog(monitors = monitors) }.into_any(),
             }
         }}
     }
@@ -201,6 +202,39 @@ fn PokedDialog(from: String, text: String) -> impl IntoView {
                     DialogDescription {{body.get_value()}}
                 }
                 DialogFooter { DialogClose {"OK"} }
+            }
+        }
+    }
+}
+
+#[component]
+fn ShareDialog(monitors: Vec<crate::screen::MonitorInfo>) -> impl IntoView {
+    let state = AppState::expect();
+    let open = open_binding(state);
+    let monitors = StoredValue::new(monitors);
+    view! {
+        Dialog(open = open) {
+            DialogContent(class = "ts-dialog") {
+                DialogHeader {
+                    DialogTitle {"Share your screen"}
+                    DialogDescription {"Everyone in your channel can watch. Pick a display."}
+                }
+                column(class = "monitor-list") {
+                    for m in move || monitors.get_value(), key = |m: &crate::screen::MonitorInfo| m.id {
+                        control(
+                            class = "monitor",
+                            tabindex = Focus::Sequential,
+                            on:click = move |_| {
+                                state.send(crate::engine::Command::StartShare { monitor: m.id });
+                                open.set(false);
+                            }
+                        ) {
+                            text(class = "monitor-name") {{format!("{}{}", m.name, if m.primary { " (main)" } else { "" })}}
+                            text(class = "monitor-size") {{format!("{} × {}", m.width, m.height)}}
+                        }
+                    }
+                }
+                DialogFooter { DialogClose(variant = ButtonVariant::Outline) {"Cancel"} }
             }
         }
     }

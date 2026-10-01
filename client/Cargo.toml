@@ -5,10 +5,10 @@ edition = "2024"
 description = "A TeamSpeak-style voice client built on zgui and Media over QUIC"
 
 [dependencies]
-zgui = { path = "../../zgui/crates/zgui" }
-zgui-ui = { path = "../../zgui/crates/zgui-ui" }
-zgui-ui-tokens = { path = "../../zgui/crates/zgui-ui-tokens" }
-zgui-ui-icons = { path = "../../zgui/crates/zgui-ui-icons" }
+zgui = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
+zgui-ui = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
+zgui-ui-tokens = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
+zgui-ui-icons = { git = "https://github.com/zortax/zgui", rev = "ec755561d1f3f012163070c20d860e1cbef1907c" }
 cpal = "0.18"
 opus = "0.4"
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "net"] }
@@ -25,3 +25,8 @@ chrono = { version = "0.4", default-features = false, features = ["clock"] }
 moq-tokio = "0.19.20"
 moq-net = "0.3.8"
 bytes = "1"
+xcap = "0.9"
+rav1e = { version = "0.8", default-features = false, features = ["threading", "asm"] }
+rav1d = { version = "1.1", default-features = false, features = ["bitdepth_8"] }
+nnnoiseless = { version = "0.5", default-features = false }
+earshot = "1"

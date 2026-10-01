@@ -18,7 +18,10 @@ pub fn color_of(name: &str) -> &'static str {
 }
 
 fn initial(name: &str) -> String {
-    name.chars().find(|c| c.is_alphanumeric()).map(|c| c.to_uppercase().collect()).unwrap_or_else(|| "?".into())
+    name.chars()
+        .find(|c| c.is_alphanumeric())
+        .map(|c| c.to_uppercase().collect())
+        .unwrap_or_else(|| "?".into())
 }
 
 #[component]

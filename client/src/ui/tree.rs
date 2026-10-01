@@ -70,8 +70,8 @@ fn TreeRow(row: Row) -> impl IntoView {
             view! { ChannelRow(id = id, name = name, depth = depth, full = full, is_default = is_default, count = count, has_children = has_children, collapsed = collapsed) }
                 .into_any()
         }
-        Row::Client { id, name, depth, muted, deaf, away, me } => view! {
-            ClientRow(id = id, name = name, depth = depth, muted = muted, deaf = deaf, away = away, me = me)
+        Row::Client { id, name, depth, muted, deaf, away, me, sharing } => view! {
+            ClientRow(id = id, name = name, depth = depth, muted = muted, deaf = deaf, away = away, me = me, sharing = sharing)
         }
         .into_any(),
     }
@@ -190,6 +190,7 @@ fn ClientRow(
     deaf: bool,
     away: bool,
     me: bool,
+    sharing: bool,
 ) -> impl IntoView {
     let state = AppState::expect();
     let talking = move || state.talking.with(|t| t.contains(&id));
@@ -266,6 +267,9 @@ fn ClientRow(
                     }
                     if move || me {
                         text(class = "node-you") {"you"}
+                    }
+                    if move || sharing {
+                        text(class = "node-live") {"LIVE"}
                     }
                     spacer()
                     if move || muted {

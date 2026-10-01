@@ -71,10 +71,21 @@ fn DevicePicker(input: bool, info: RwSignal<DeviceInfo, LocalStorage>) -> impl I
     let state = AppState::expect();
     let lists = list_devices();
     let names = if input { lists.inputs } else { lists.outputs };
-    let default = if input { lists.default_input } else { lists.default_output };
-    let saved = state.settings.with_untracked(|s| if input { s.input_device.clone() } else { s.output_device.clone() });
+    let default = if input {
+        lists.default_input
+    } else {
+        lists.default_output
+    };
+    let saved = state.settings.with_untracked(|s| {
+        if input {
+            s.input_device.clone()
+        } else {
+            s.output_device.clone()
+        }
+    });
     let value = RwSignal::new_local(saved.unwrap_or_else(|| SYSTEM.to_owned()));
-    let audio: StoredValue<Arc<Audio>> = StoredValue::new(state.engine.with_value(|e| e.audio.clone()));
+    let audio: StoredValue<Arc<Audio>> =
+        StoredValue::new(state.engine.with_value(|e| e.audio.clone()));
     let system_label = StoredValue::new(format!(
         "System default{}",
         default.map(|d| format!(" ({d})")).unwrap_or_default()
@@ -92,7 +103,14 @@ fn DevicePicker(input: bool, info: RwSignal<DeviceInfo, LocalStorage>) -> impl I
         });
         let audio = audio.get_value();
         spawn_local(async move {
-            let next = blocking(move || if input { audio.set_input(name) } else { audio.set_output(name) }).await;
+            let next = blocking(move || {
+                if input {
+                    audio.set_input(name)
+                } else {
+                    audio.set_output(name)
+                }
+            })
+            .await;
             info.set(next);
         });
     });
@@ -124,11 +142,13 @@ pub fn OptionsDialog() -> impl IntoView {
     // Poll the microphone level for the meter while the dialog is open.
     let level = RwSignal::new_local(-100.0f32);
     let speaking = RwSignal::new_local(false);
+    let voice = RwSignal::new_local(0.0f32);
     let timer = {
         let shared = shared.clone();
         set_interval(std::time::Duration::from_millis(50), move || {
             level.set(shared.level_db.get());
             speaking.set(shared.transmitting.load(Ordering::Relaxed));
+            voice.set(shared.voice_prob.get());
         })
     };
     on_cleanup_local(move || drop(timer));
@@ -182,6 +202,32 @@ pub fn OptionsDialog() -> impl IntoView {
                                         }))
                                 }
                             }
+                            Section(title = "Processing") {
+                                Setting(label = "Noise suppression") {
+                                    row(class = "switch-row") {
+                                        Switch(
+                                            default_checked = settings.noise_suppression,
+                                            on_change = UnsyncCallback::new(move |on: bool| {
+                                                state.engine.with_value(|e| e.audio.shared.noise_suppression.store(on, Ordering::Relaxed));
+                                                state.update_settings(|s| s.noise_suppression = on);
+                                            })
+                                        )
+                                        text(class = "opt-hint") {"RNNoise removes fans, keyboards and hum."}
+                                    }
+                                }
+                                Setting(label = "Speech detection") {
+                                    row(class = "switch-row") {
+                                        Switch(
+                                            default_checked = settings.smart_vad,
+                                            on_change = UnsyncCallback::new(move |on: bool| {
+                                                state.engine.with_value(|e| e.audio.shared.smart_vad.store(on, Ordering::Relaxed));
+                                                state.update_settings(|s| s.smart_vad = on);
+                                            })
+                                        )
+                                        text(class = "opt-hint") {"A neural detector (earshot) opens the mic only for voice."}
+                                    }
+                                }
+                            }
                             Section(title = "Transmission") {
                                 row(class = "segmented", a11y:role = Role::RadioGroup) {
                                     {mode_button(VoiceMode::Activation, "Voice activation")}
@@ -203,7 +249,11 @@ pub fn OptionsDialog() -> impl IntoView {
                                                 state.engine.with_value(|e| e.audio.shared.threshold_db.set(v as f32));
                                                 state.update_settings(|s| s.threshold_db = v as f32);
                                             }))
-                                        text(class = "opt-hint") {"Speak normally: the bar turns green above the red marker."}
+                                        row(class = "vad-readout") {
+                                            text(class = "opt-hint") {"Speak normally: the bar turns green above the red marker."}
+                                            spacer()
+                                            text(class = "vad-prob", class:on = move || voice.get() >= 0.5) {{move || format!("speech {:.0}%", voice.get() * 100.0)}}
+                                        }
                                     }
                                 }
                             }

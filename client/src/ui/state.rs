@@ -76,6 +76,8 @@ pub struct Settings {
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     pub theme: String,
+    pub noise_suppression: bool,
+    pub smart_vad: bool,
 }
 
 pub const DEFAULT_ADDRESS: &str = "moqspeak.newspicel.workers.dev/public";
@@ -94,12 +96,14 @@ impl Default for Settings {
                 nickname: String::new(),
             }],
             voice_mode: "activation".into(),
-            threshold_db: -38.0,
+            threshold_db: -50.0,
             input_gain: 1.0,
             output_volume: 1.0,
             input_device: None,
             output_device: None,
             theme: "dark".into(),
+            noise_suppression: true,
+            smart_vad: true,
         }
     }
 }
@@ -153,7 +157,11 @@ pub enum Theme {
 
 impl Theme {
     pub fn parse(s: &str) -> Self {
-        if s == "light" { Theme::Light } else { Theme::Dark }
+        if s == "light" {
+            Theme::Light
+        } else {
+            Theme::Dark
+        }
     }
     pub fn name(self) -> &'static str {
         match self {
@@ -168,10 +176,21 @@ impl Theme {
 pub enum Modal {
     None,
     Connect,
-    CreateChannel { parent: Option<ChannelId> },
+    CreateChannel {
+        parent: Option<ChannelId>,
+    },
     Options,
-    Poke { to: ClientId, name: String },
-    Poked { from: String, text: String },
+    Poke {
+        to: ClientId,
+        name: String,
+    },
+    Poked {
+        from: String,
+        text: String,
+    },
+    Share {
+        monitors: Vec<crate::screen::MonitorInfo>,
+    },
     About,
 }
 
@@ -197,6 +216,7 @@ pub struct AppState {
     pub away: RwSignal<bool>,
     pub voice_mode: RwSignal<VoiceMode>,
     pub theme: RwSignal<Theme>,
+    pub sharing: RwSignal<bool>,
     pub drag: RwSignal<Option<Drag>>,
     pub drop_target: RwSignal<Option<ChannelId>>,
     pub pointer: RwSignal<(f32, f32)>,
@@ -222,6 +242,10 @@ impl AppState {
         audio.threshold_db.set(settings.threshold_db);
         audio.input_gain.set(settings.input_gain);
         audio.master_volume.set(settings.output_volume);
+        audio
+            .noise_suppression
+            .store(settings.noise_suppression, Ordering::Relaxed);
+        audio.smart_vad.store(settings.smart_vad, Ordering::Relaxed);
         Self {
             engine: StoredValue::new(engine),
             status: RwSignal::new(ConnStatus::Disconnected),
@@ -243,6 +267,7 @@ impl AppState {
             away: RwSignal::new(false),
             voice_mode: RwSignal::new(mode),
             theme: RwSignal::new(theme),
+            sharing: RwSignal::new(false),
             drag: RwSignal::new(None),
             drop_target: RwSignal::new(None),
             pointer: RwSignal::new((0.0, 0.0)),
@@ -410,12 +435,33 @@ impl AppState {
         }
     }
 
+    /// Starts or stops sharing. With several monitors, asks which one first.
+    pub fn toggle_share(&self) {
+        if self.sharing.get_untracked() {
+            self.send(Command::StopShare);
+            return;
+        }
+        let monitors = crate::screen::list_monitors();
+        match monitors.len() {
+            0 => self.push_line(
+                Tab::Server,
+                LineKind::Error,
+                "No screen to share. On macOS, allow moqspeak under System Settings → Privacy & Security → Screen Recording.",
+            ),
+            1 => self.send(Command::StartShare { monitor: monitors[0].id }),
+            _ => self.modal.set(Modal::Share { monitors }),
+        }
+    }
+
     /// Moves a client: yourself through a join, anyone else through a move request.
     pub fn move_client(&self, client: ClientId, channel: ChannelId) {
         if Some(client) == self.me.get_untracked() {
             self.join(channel);
         } else if self.client(client).is_some_and(|c| c.channel != channel) {
-            self.msg(ClientMsg::Move { id: client, channel });
+            self.msg(ClientMsg::Move {
+                id: client,
+                channel,
+            });
         }
     }
 
@@ -549,6 +595,14 @@ impl AppState {
                         self.selected.set(Selection::Server);
                     }
                 }
+                // A development aid for screenshots: MOQSPEAK_SELECT=<nickname>.
+                if let Ok(wanted) = std::env::var("MOQSPEAK_SELECT") {
+                    if self.selected.get_untracked() == Selection::Server {
+                        if let Some(c) = clients.iter().find(|c| c.name == wanted) {
+                            self.selected.set(Selection::Client(c.id));
+                        }
+                    }
+                }
                 self.server.set(server);
                 self.channels.set(channels);
                 self.clients.set(clients);
@@ -612,6 +666,7 @@ impl AppState {
                 });
             }
             Event::Talking(set) => self.talking.set(set),
+            Event::Sharing(on) => self.sharing.set(on),
             Event::Media(status) => {
                 match &status {
                     MediaStatus::Connected { relay, .. }
@@ -660,6 +715,7 @@ pub enum Row {
         deaf: bool,
         away: bool,
         me: bool,
+        sharing: bool,
     },
 }
 
@@ -681,12 +737,15 @@ pub fn tree_rows(
         collapsed: &'a BTreeSet<ChannelId>,
     }
     fn walk(cx: &Walk<'_>, parent: Option<ChannelId>, depth: u16, rows: &mut Vec<Row>) {
-        let mut children: Vec<&Channel> = cx.channels.iter().filter(|c| c.parent == parent).collect();
+        let mut children: Vec<&Channel> =
+            cx.channels.iter().filter(|c| c.parent == parent).collect();
         children.sort_by_key(|c| (c.order, c.id));
         for ch in children {
-            let mut inside: Vec<&Client> = cx.clients.iter().filter(|c| c.channel == ch.id).collect();
+            let mut inside: Vec<&Client> =
+                cx.clients.iter().filter(|c| c.channel == ch.id).collect();
             inside.sort_by_key(|c| c.name.to_lowercase());
-            let has_children = !inside.is_empty() || cx.channels.iter().any(|c| c.parent == Some(ch.id));
+            let has_children =
+                !inside.is_empty() || cx.channels.iter().any(|c| c.parent == Some(ch.id));
             let collapsed = cx.collapsed.contains(&ch.id);
             rows.push(Row::Channel {
                 id: ch.id,
@@ -711,12 +770,23 @@ pub fn tree_rows(
                     deaf: c.deaf,
                     away: c.away,
                     me: Some(c.id) == cx.me,
+                    sharing: c.sharing,
                 });
             }
             walk(cx, Some(ch.id), depth + 1, rows);
         }
     }
-    walk(&Walk { channels, clients, me, collapsed }, None, 1, &mut rows);
+    walk(
+        &Walk {
+            channels,
+            clients,
+            me,
+            collapsed,
+        },
+        None,
+        1,
+        &mut rows,
+    );
     rows
 }
 
@@ -748,6 +818,7 @@ mod tests {
             away: false,
             away_message: String::new(),
             broadcast: String::new(),
+            sharing: false,
             connected_at: 0,
             platform: String::new(),
             version: String::new(),
@@ -762,7 +833,13 @@ mod tests {
             ch(3, "CS", Some(2), 0),
         ];
         let clients = vec![cl(10, "bob", 2), cl(11, "Alice", 2), cl(12, "carl", 3)];
-        let rows = tree_rows(&ServerInfo::default(), &channels, &clients, Some(11), &BTreeSet::new());
+        let rows = tree_rows(
+            &ServerInfo::default(),
+            &channels,
+            &clients,
+            Some(11),
+            &BTreeSet::new(),
+        );
         let names: Vec<String> = rows
             .iter()
             .map(|r| match r {

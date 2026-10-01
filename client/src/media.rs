@@ -16,12 +16,18 @@ use tokio::task::JoinHandle;
 use crate::audio::{Mixer, Packet};
 use crate::engine::MediaStatus;
 use crate::model::ClientId;
+use crate::screen::VideoFrame;
 
 /// The track every broadcast carries its voice on.
 pub const AUDIO_TRACK: &str = "audio";
+/// The track a shared screen travels on: AV1, a group per keyframe.
+pub const SCREEN_TRACK: &str = "screen";
 
 enum Op {
     Publish(Packet),
+    Video(VideoFrame),
+    Watch(ClientId, String, std::sync::mpsc::Sender<VideoFrame>),
+    Unwatch(ClientId),
     Subscribe(ClientId, String),
     Unsubscribe(ClientId),
     Count(usize),
@@ -55,6 +61,19 @@ impl MediaSession {
 
     pub fn publish(&self, packet: Packet) {
         let _ = self.ops.send(Op::Publish(packet));
+    }
+
+    pub fn publish_video(&self, frame: VideoFrame) {
+        let _ = self.ops.send(Op::Video(frame));
+    }
+
+    /// Starts receiving `path`'s screen into `sink`.
+    pub fn watch(&self, id: ClientId, path: String, sink: std::sync::mpsc::Sender<VideoFrame>) {
+        let _ = self.ops.send(Op::Watch(id, path, sink));
+    }
+
+    pub fn unwatch(&self, id: ClientId) {
+        let _ = self.ops.send(Op::Unwatch(id));
     }
 
     pub fn subscribe(&self, id: ClientId, path: String) {
@@ -129,6 +148,8 @@ async fn run(
     let pub_origin = moq_tokio::origin::spawn();
     let producer = pub_origin.create_broadcast(broadcast.as_str())?;
     let mut track = producer.create_track(AUDIO_TRACK, None)?;
+    let screen = producer.create_track(SCREEN_TRACK, None)?;
+    let mut screen_group: Option<moq_net::group::Producer> = None;
     producer.announce(Default::default())?;
 
     // Subscriber: scoped to this server's room so discovery asks for that namespace only.
@@ -157,6 +178,7 @@ async fn run(
 
     let consumer = sub_scoped.consume();
     let mut readers: HashMap<ClientId, JoinHandle<()>> = HashMap::new();
+    let mut viewers: HashMap<ClientId, JoinHandle<()>> = HashMap::new();
     let mut count = 0usize;
     let connected = |count| MediaStatus::Connected {
         relay: host.clone(),
@@ -171,6 +193,34 @@ async fn run(
                 Some(Op::Publish(packet)) => {
                     if let Err(e) = track.write_frame(Timestamp::now(), bytes::Bytes::from(packet.encode())) {
                         tracing::warn!("write audio frame: {e}");
+                    }
+                }
+                Some(Op::Video(frame)) => {
+                    if frame.keyframe || screen_group.is_none() {
+                        if let Some(old) = screen_group.take() {
+                            let _ = old.finish();
+                        }
+                        match screen.append_group() {
+                            Ok(g) => screen_group = Some(g),
+                            Err(e) => { tracing::warn!("screen group: {e}"); continue; }
+                        }
+                    }
+                    if let Some(group) = screen_group.as_mut() {
+                        if let Err(e) = group.write_frame(Timestamp::now(), bytes::Bytes::from(frame.encode())) {
+                            tracing::warn!("write screen frame: {e}");
+                            screen_group = None;
+                        }
+                    }
+                }
+                Some(Op::Watch(id, path, sink)) => {
+                    if let Some(old) = viewers.remove(&id) {
+                        old.abort();
+                    }
+                    viewers.insert(id, tokio::spawn(watch_peer(consumer.clone(), path, sink)));
+                }
+                Some(Op::Unwatch(id)) => {
+                    if let Some(old) = viewers.remove(&id) {
+                        old.abort();
                     }
                 }
                 Some(Op::Subscribe(id, path)) => {
@@ -202,9 +252,13 @@ async fn run(
         }
     }
 
-    for (_, reader) in readers {
+    for (_, reader) in readers.into_iter().chain(viewers) {
         reader.abort();
     }
+    if let Some(g) = screen_group.take() {
+        let _ = g.finish();
+    }
+    let _ = screen.finish();
     let _ = track.finish();
     producer.close();
     Ok(())
@@ -224,6 +278,36 @@ fn report(
     };
     let _ = status.send(next);
     fatal
+}
+
+/// Feeds one remote screen into `sink` until aborted or the viewer goes away.
+async fn watch_peer(
+    consumer: moq_net::origin::Consumer,
+    path: String,
+    sink: std::sync::mpsc::Sender<VideoFrame>,
+) {
+    loop {
+        let result: Result<()> = async {
+            let broadcast = consumer.routed_broadcast(path.as_str()).await?;
+            let mut sub = broadcast.track(SCREEN_TRACK)?.subscribe(None).await?;
+            tracing::info!("watching the screen of {path}");
+            while let Some(mut group) = sub.recv_group().await? {
+                while let Some(frame) = group.read_frame().await? {
+                    if let Some(f) = VideoFrame::decode(&frame.payload) {
+                        if sink.send(f).is_err() {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        .await;
+        if let Err(e) = result {
+            tracing::debug!("screen of {path} ended: {e:#}");
+        }
+        tokio::time::sleep(Duration::from_millis(700)).await;
+    }
 }
 
 /// Plays one remote broadcast until aborted, resubscribing whenever it ends.

@@ -39,6 +39,8 @@ pub struct Client {
     pub away_message: String,
     pub broadcast: String,
     #[serde(default)]
+    pub sharing: bool,
+    #[serde(default)]
     pub connected_at: u64,
     #[serde(default)]
     pub platform: String,
@@ -67,7 +69,10 @@ pub enum ChatTarget {
 
 #[derive(Clone, Debug, Deserialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
-#[allow(dead_code, reason = "the protocol carries fields this client does not show yet")]
+#[allow(
+    dead_code,
+    reason = "the protocol carries fields this client does not show yet"
+)]
 pub enum ServerMsg {
     Welcome {
         you: Client,
@@ -106,7 +111,10 @@ pub enum ServerMsg {
 
 #[derive(Clone, Debug, Serialize)]
 #[serde(tag = "t", rename_all = "snake_case")]
-#[allow(dead_code, reason = "the server accepts commands this client has no control for yet")]
+#[allow(
+    dead_code,
+    reason = "the server accepts commands this client has no control for yet"
+)]
 pub enum ClientMsg {
     Hello {
         name: String,
@@ -166,6 +174,9 @@ pub enum ClientMsg {
     Move {
         id: ClientId,
         channel: ChannelId,
+    },
+    Sharing {
+        sharing: bool,
     },
 }
 

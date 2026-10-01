@@ -15,6 +15,7 @@ use tokio_tungstenite::tungstenite::Message;
 use crate::audio::{Audio, Packet};
 use crate::media::MediaSession;
 use crate::model::{Channel, ChatTarget, Client, ClientId, ClientMsg, ServerInfo, ServerMsg};
+use crate::screen::{Sharer, VideoFrame};
 
 /// Where the client is in connecting to a server.
 #[derive(Clone, Debug, PartialEq)]
@@ -56,6 +57,8 @@ pub enum Event {
     },
     Talking(BTreeSet<ClientId>),
     Media(MediaStatus),
+    /// Whether this client is sharing its screen right now.
+    Sharing(bool),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -66,12 +69,31 @@ pub enum MediaStatus {
     Failed(String),
 }
 
+/// The monitor id that shares a synthetic test pattern instead of a real screen.
+pub const TEST_PATTERN: u32 = u32::MAX;
+
 /// What the UI asks the network to do.
 #[derive(Clone, Debug)]
 pub enum Command {
-    Connect { address: String, nickname: String },
+    Connect {
+        address: String,
+        nickname: String,
+    },
     Disconnect,
     Send(ClientMsg),
+    /// Shares monitor `id`, replacing any running share.
+    StartShare {
+        monitor: u32,
+    },
+    StopShare,
+    /// Streams `client`'s screen into `sink` until [`Command::Unwatch`].
+    Watch {
+        client: ClientId,
+        sink: std::sync::mpsc::Sender<VideoFrame>,
+    },
+    Unwatch {
+        client: ClientId,
+    },
 }
 
 /// A connection target parsed from what the user typed, such as
@@ -137,7 +159,10 @@ impl Engine {
     }
 
     /// Starts the runtime and the audio devices. Events arrive on the returned receiver.
-    pub fn start(input: Option<String>, output: Option<String>) -> (Self, UnboundedReceiver<Event>) {
+    pub fn start(
+        input: Option<String>,
+        output: Option<String>,
+    ) -> (Self, UnboundedReceiver<Event>) {
         let (packet_tx, packet_rx) = unbounded_channel();
         let audio = Arc::new(Audio::start(packet_tx, input, output));
         Self::start_with(audio, packet_rx)
@@ -223,7 +248,13 @@ async fn run(
                 let _ = events.send(Event::Media(MediaStatus::Off));
                 let _ = events.send(Event::Talking(BTreeSet::new()));
             }
-            Command::Disconnect | Command::Send(_) => {}
+            Command::StartShare { .. } => {
+                let _ = events.send(Event::Log {
+                    error: true,
+                    text: "Connect to a server before sharing your screen".into(),
+                });
+            }
+            _ => {}
         }
     }
 }
@@ -294,6 +325,8 @@ async fn session(
     let mut tick = tokio::time::interval(Duration::from_millis(60));
     let mut keepalive = tokio::time::interval(Duration::from_secs(20));
     let mut last_clients: Vec<Client> = Vec::new();
+    let mut sharer: Option<Sharer> = None;
+    let (video_tx, mut video_rx) = unbounded_channel::<VideoFrame>();
 
     let result = loop {
         tokio::select! {
@@ -354,7 +387,49 @@ async fn session(
                         break Err(anyhow!("connection lost: {e}"));
                     }
                 }
+                Some(Command::StartShare { monitor }) => {
+                    sharer = None;
+                    let tx = video_tx.clone();
+                    let sink = move |frame| { let _ = tx.send(frame); };
+                    let started = if monitor == TEST_PATTERN { Sharer::test_pattern(sink) } else { Sharer::start(monitor, sink) };
+                    match started {
+                        Ok(s) => {
+                            sharer = Some(s);
+                            let _ = events.send(Event::Sharing(true));
+                            let _ = events.send(Event::Log { error: false, text: "You are now sharing your screen".into() });
+                            let msg = ClientMsg::Sharing { sharing: true };
+                            let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
+                        }
+                        Err(e) => {
+                            let _ = events.send(Event::Log { error: true, text: format!("Screen sharing failed: {e:#}") });
+                        }
+                    }
+                }
+                Some(Command::StopShare) => {
+                    if sharer.take().is_some() {
+                        let _ = events.send(Event::Sharing(false));
+                        let _ = events.send(Event::Log { error: false, text: "Screen sharing stopped".into() });
+                        let msg = ClientMsg::Sharing { sharing: false };
+                        let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
+                    }
+                }
+                Some(Command::Watch { client, sink }) => {
+                    let path = last_clients.iter().find(|c| c.id == client).map(|c| c.broadcast.clone());
+                    if let (Some(path), Some(session)) = (path, &media) {
+                        session.watch(client, path, sink);
+                    }
+                }
+                Some(Command::Unwatch { client }) => {
+                    if let Some(session) = &media {
+                        session.unwatch(client);
+                    }
+                }
             },
+            Some(frame) = video_rx.recv() => {
+                if let Some(session) = &media {
+                    session.publish_video(frame);
+                }
+            }
             Some(packet) = packets.recv() => {
                 if let Some(session) = &media {
                     session.publish(packet);
@@ -394,6 +469,9 @@ async fn session(
 
     for id in subscribed.keys() {
         audio.mixer.remove(*id);
+    }
+    if sharer.take().is_some() {
+        let _ = events.send(Event::Sharing(false));
     }
     if let Some(session) = media {
         session.stop();

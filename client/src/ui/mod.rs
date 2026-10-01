@@ -7,6 +7,7 @@ pub mod icons;
 pub mod info;
 pub mod menu;
 pub mod options;
+pub mod screen;
 pub mod shell;
 pub mod state;
 pub mod status;

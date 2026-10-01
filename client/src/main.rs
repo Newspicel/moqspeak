@@ -5,14 +5,15 @@ mod bot;
 mod engine;
 mod media;
 mod model;
+mod screen;
 mod ui;
 
 use zgui::prelude::*;
 use zgui_ui_tokens::prelude::*;
 
 use crate::engine::Engine;
-use crate::ui::shell::ShellProps;
 use crate::ui::AppState;
+use crate::ui::shell::ShellProps;
 
 fn main() -> Result<(), zgui::Error> {
     tracing_subscriber::fmt()
@@ -32,7 +33,10 @@ fn main() -> Result<(), zgui::Error> {
     let autoconnect = args.get(1).filter(|a| !a.starts_with('-')).cloned();
     let autonick = args.get(2).cloned();
     let saved = ui::state::Settings::load();
-    let mut boot = Some(Engine::start(saved.input_device.clone(), saved.output_device.clone()));
+    let mut boot = Some(Engine::start(
+        saved.input_device.clone(),
+        saved.output_device.clone(),
+    ));
 
     app()
         .with_application_id("dev.moqspeak.Client")

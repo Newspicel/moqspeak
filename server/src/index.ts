@@ -37,7 +37,8 @@ interface Client {
   deaf: boolean; // speakers muted
   away: boolean;
   away_message: string;
-  broadcast: string; // MoQ broadcast path this client publishes audio on
+  broadcast: string; // MoQ broadcast path this client publishes audio and screen on
+  sharing: boolean; // whether the screen track carries a live share
   connected_at: number;
   platform: string;
   version: string;
@@ -54,7 +55,8 @@ type Incoming =
   | { t: "edit_channel"; id: number; name?: string; topic?: string; description?: string; max_clients?: number }
   | { t: "delete_channel"; id: number }
   | { t: "kick"; id: number; reason?: string }
-  | { t: "move"; id: number; channel: number };
+  | { t: "move"; id: number; channel: number }
+  | { t: "sharing"; sharing: boolean };
 
 const MAX_NAME = 30;
 const MAX_TEXT = 1024;
@@ -257,6 +259,7 @@ export class VoiceServer extends DurableObject<Env> {
         away: false,
         away_message: "",
         broadcast: `moqspeak/${this.serverName}/${id}-${crypto.randomUUID().slice(0, 8)}`,
+        sharing: false,
         connected_at: Date.now(),
         platform: clean(msg.platform, 32),
         version: clean(msg.version, 32),
@@ -402,6 +405,19 @@ export class VoiceServer extends DurableObject<Env> {
         for (const id of doomed) this.channels.delete(id);
         this.persist();
         this.broadcast({ t: "event", kind: "channel_deleted", text: `Channel "${ch.name}" was deleted by "${me.name}"` });
+        this.pushState();
+        return;
+      }
+      case "sharing": {
+        const sharing = msg.sharing === true;
+        if (sharing === me.sharing) return;
+        update({ sharing });
+        this.broadcast({
+          t: "event",
+          kind: "sharing",
+          client: me.id,
+          text: sharing ? `"${me.name}" started sharing their screen` : `"${me.name}" stopped sharing their screen`,
+        });
         this.pushState();
         return;
       }

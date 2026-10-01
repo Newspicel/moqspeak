@@ -507,3 +507,31 @@
   font-weight: 600;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
+
+.switch-row { align-items: center; gap: 10px; }
+.vad-readout { align-items: center; gap: 8px; }
+.vad-prob { font-size: 11px; padding: 1px 6px; border-radius: 4px; background-color: rgba(128, 136, 150, 0.2); color: #8b93a3; }
+.vad-prob.on { background-color: rgba(63, 207, 142, 0.2); color: #3fcf8e; }
+
+/* ---- screen sharing ------------------------------------------------------------------ */
+
+.screen-block { gap: 8px; }
+.screen-head { align-items: center; gap: 8px; }
+.screen-frame {
+  width: 100%;
+  height: 240px;
+  border-radius: 10px;
+  background-color: #000000;
+}
+.monitor-list { gap: 8px; }
+.monitor {
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(128, 136, 150, 0.35);
+}
+.monitor:hover { border-color: #4c8dff; background-color: rgba(76, 141, 255, 0.1); }
+.monitor-name { flex: 1 1 auto; font-weight: 600; }
+.monitor-size { color: #8b93a3; }
+.share-btn.disabled { opacity: 0.4; }

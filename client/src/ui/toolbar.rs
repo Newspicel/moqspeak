@@ -96,6 +96,17 @@ pub fn Toolbar() -> impl IntoView {
                     on_press = std::rc::Rc::new(move || state.modal.set(Modal::CreateChannel { parent: None })))
                 Tool(svg = icons::SETTINGS, label = "Options", on_press = std::rc::Rc::new(move || state.modal.set(Modal::Options)))
             }
+            control(
+                class = "share-btn",
+                class:live = move || state.sharing.get(),
+                class:disabled = move || !state.connected(),
+                tabindex = Focus::Sequential,
+                a11y:label = "Share screen",
+                on:click = move |_| if state.connected() { state.toggle_share() }
+            ) {
+                DynIco(svg = Signal::derive(move || if state.sharing.get() { icons::SCREEN_OFF } else { icons::SCREEN }))
+                text {{move || if state.sharing.get() { "Stop sharing" } else { "Share screen" }}}
+            }
             spacer()
             // Push to talk, for when the voice mode asks for it.
             if move || state.voice_mode.get() == VoiceMode::PushToTalk {

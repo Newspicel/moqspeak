@@ -78,6 +78,12 @@ pub struct AudioShared {
     pub level_db: AtomicF32,
     /// Whether the encoder is sending right now.
     pub transmitting: AtomicBool,
+    /// Whether RNNoise cleans the microphone before encoding.
+    pub noise_suppression: AtomicBool,
+    /// Whether the neural detector decides what is speech.
+    pub smart_vad: AtomicBool,
+    /// The detector's latest speech probability.
+    pub voice_prob: AtomicF32,
 }
 
 impl AudioShared {
@@ -93,6 +99,9 @@ impl AudioShared {
             master_volume: AtomicF32::new(1.0),
             level_db: AtomicF32::new(-100.0),
             transmitting: AtomicBool::new(false),
+            noise_suppression: AtomicBool::new(true),
+            smart_vad: AtomicBool::new(true),
+            voice_prob: AtomicF32::new(0.0),
         })
     }
     pub fn mode(&self) -> VoiceMode {
@@ -314,6 +323,7 @@ impl Resampler {
 }
 
 mod devices;
+mod processing;
 
 pub use devices::{DeviceInfo, list_devices};
 
@@ -327,7 +337,11 @@ pub struct Audio {
 impl Audio {
     /// Shared state and a mixer with no devices behind them, for the headless bot.
     pub fn headless() -> Self {
-        Self { shared: AudioShared::new(), mixer: Arc::new(Mixer::default()), devices: None }
+        Self {
+            shared: AudioShared::new(),
+            mixer: Arc::new(Mixer::default()),
+            devices: None,
+        }
     }
 
     /// Opens the named devices, or the system defaults for `None`. Encoded packets go to
@@ -340,7 +354,8 @@ impl Audio {
         let shared = AudioShared::new();
         let mixer = Arc::new(Mixer::default());
         let (frame_tx, frame_rx) = std::sync::mpsc::channel::<Vec<f32>>();
-        let devices = devices::DeviceThread::spawn(shared.clone(), mixer.clone(), frame_tx, input, output);
+        let devices =
+            devices::DeviceThread::spawn(shared.clone(), mixer.clone(), frame_tx, input, output);
         {
             let shared = shared.clone();
             let mixer = mixer.clone();
@@ -349,7 +364,11 @@ impl Audio {
                 .spawn(move || encoder_loop(shared, mixer, frame_rx, packets))
                 .expect("spawn encoder thread");
         }
-        Self { shared, mixer, devices: Some(devices) }
+        Self {
+            shared,
+            mixer,
+            devices: Some(devices),
+        }
     }
 
     /// What is open right now.
@@ -359,12 +378,18 @@ impl Audio {
 
     /// Reopens the microphone; `None` follows the system default.
     pub fn set_input(&self, name: Option<String>) -> DeviceInfo {
-        self.devices.as_ref().map(|d| d.set_input(name)).unwrap_or_default()
+        self.devices
+            .as_ref()
+            .map(|d| d.set_input(name))
+            .unwrap_or_default()
     }
 
     /// Reopens the speakers; `None` follows the system default.
     pub fn set_output(&self, name: Option<String>) -> DeviceInfo {
-        self.devices.as_ref().map(|d| d.set_output(name)).unwrap_or_default()
+        self.devices
+            .as_ref()
+            .map(|d| d.set_output(name))
+            .unwrap_or_default()
     }
 }
 
@@ -397,11 +422,18 @@ fn encoder_loop(
     let mut hangover = 0u32; // frames left before activation closes
     const HANGOVER_FRAMES: u32 = 20; // 400 ms
     let mut smoothed = -100.0f32;
+    let mut cleaner = processing::Cleaner::new();
+    let mut detector = processing::SpeechDetector::new();
 
     while let Ok(chunk) = frames.recv() {
         buffer.extend_from_slice(&chunk);
         while buffer.len() >= FRAME {
-            let frame: Vec<f32> = buffer.drain(..FRAME).collect();
+            let mut frame: Vec<f32> = buffer.drain(..FRAME).collect();
+            if shared.noise_suppression.load(Ordering::Relaxed) {
+                cleaner.process(&mut frame);
+            }
+            let speech = detector.push(&frame);
+            shared.voice_prob.set(speech);
             let level = level_db(&frame);
             smoothed = if level > smoothed {
                 level
@@ -414,7 +446,10 @@ fn encoder_loop(
                 VoiceMode::Continuous => true,
                 VoiceMode::PushToTalk => shared.ptt_down.load(Ordering::Relaxed),
                 VoiceMode::Activation => {
-                    if level >= shared.threshold_db.get() {
+                    let loud = level >= shared.threshold_db.get();
+                    let voiced =
+                        !shared.smart_vad.load(Ordering::Relaxed) || speech >= processing::SPEECH;
+                    if loud && voiced {
                         hangover = HANGOVER_FRAMES;
                     } else {
                         hangover = hangover.saturating_sub(1);
