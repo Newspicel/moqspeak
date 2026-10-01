@@ -13,7 +13,7 @@ use super::{MonitorInfo, VideoFrame};
 /// The widest picture we send. Wider screens are scaled down.
 const MAX_WIDTH: usize = 1600;
 /// Frames per second we aim for.
-const FPS: u64 = 15;
+pub(super) const FPS: u64 = 15;
 /// A keyframe at least this often, so late viewers start within two seconds.
 pub(super) const KEY_INTERVAL: u64 = FPS * 2;
 
@@ -112,7 +112,7 @@ impl Encoder {
 }
 
 /// The size a `w`×`h` screen is sent at: at most [`MAX_WIDTH`] wide, both sides even.
-fn target_size(w: usize, h: usize) -> (usize, usize) {
+pub(super) fn target_size(w: usize, h: usize) -> (usize, usize) {
     let scale = (MAX_WIDTH as f32 / w as f32).min(1.0);
     let tw = ((w as f32 * scale) as usize) & !7;
     let th = ((h as f32 * scale) as usize) & !1;
@@ -122,6 +122,32 @@ fn target_size(w: usize, h: usize) -> (usize, usize) {
 /// A running screen share. Dropping it stops the capture.
 pub struct Sharer {
     stop: Arc<AtomicBool>,
+    /// Set when the capture ended by itself, such as from the system's sharing controls.
+    ended: Arc<AtomicBool>,
+}
+
+impl Sharer {
+    /// Runs `body` on a capture thread until it returns; `body` watches the stop flag it is given.
+    pub(super) fn run(
+        ended: Arc<AtomicBool>,
+        body: impl FnOnce(&AtomicBool) + Send + 'static,
+    ) -> Result<Self> {
+        let stop = Arc::new(AtomicBool::new(false));
+        let (flag, done) = (stop.clone(), ended.clone());
+        std::thread::Builder::new()
+            .name("screen-share".into())
+            .spawn(move || {
+                body(&flag);
+                done.store(true, Ordering::Relaxed);
+            })
+            .context("starting the capture thread")?;
+        Ok(Self { stop, ended })
+    }
+
+    /// Whether the capture stopped without being asked to.
+    pub fn ended(&self) -> bool {
+        self.ended.load(Ordering::Relaxed) && !self.stop.load(Ordering::Relaxed)
+    }
 }
 
 impl Sharer {
@@ -188,7 +214,10 @@ impl Sharer {
         ready_rx
             .recv_timeout(Duration::from_secs(10))
             .map_err(|_| anyhow!("the screen did not open in time"))??;
-        Ok(Self { stop })
+        Ok(Self {
+            stop,
+            ended: Arc::new(AtomicBool::new(false)),
+        })
     }
 }
 
@@ -233,7 +262,10 @@ impl Sharer {
                     std::thread::sleep(Duration::from_millis(1000 / FPS));
                 }
             })?;
-        Ok(Self { stop })
+        Ok(Self {
+            stop,
+            ended: Arc::new(AtomicBool::new(false)),
+        })
     }
 }
 

@@ -16,7 +16,30 @@ use crate::audio::{Audio, Packet};
 use crate::identity::Identity;
 use crate::media::MediaSession;
 use crate::model::{Channel, ChatTarget, Client, ClientId, ClientMsg, ServerInfo, ServerMsg};
-use crate::screen::{Sharer, VideoFrame};
+use crate::screen::{Handoff, Sharer, VideoFrame};
+
+/// What the system picker chose. Only macOS has one; elsewhere this is never constructed.
+#[cfg(target_os = "macos")]
+pub type Picked = crate::screen::mac::Picked;
+#[cfg(not(target_os = "macos"))]
+#[derive(Debug)]
+pub enum Picked {}
+
+#[cfg(target_os = "macos")]
+fn start_picked(
+    picked: Handoff<Picked>,
+    sink: impl Fn(VideoFrame) + Send + 'static,
+) -> Result<Sharer> {
+    let picked = picked
+        .take()
+        .ok_or_else(|| anyhow!("that choice was already used"))?;
+    crate::screen::mac::start(picked, sink)
+}
+
+#[cfg(not(target_os = "macos"))]
+fn start_picked(_: Handoff<Picked>, _: impl Fn(VideoFrame) + Send + 'static) -> Result<Sharer> {
+    Err(anyhow!("there is no system picker on this platform"))
+}
 
 /// Where the client is in connecting to a server.
 #[derive(Clone, Debug, PartialEq)]
@@ -86,6 +109,8 @@ pub enum Command {
     StartShare {
         monitor: u32,
     },
+    /// Shares what the user chose in the system picker.
+    StartSharePicked(Handoff<Picked>),
     StopShare,
     /// Streams `client`'s screen into `sink` until [`Command::Unwatch`] names the same `view`.
     /// Each viewer has its own `view`, so two views of one screen do not end each other.
@@ -420,11 +445,16 @@ async fn session(
                         break Err(anyhow!("connection lost: {e}"));
                     }
                 }
-                Some(Command::StartShare { monitor }) => {
+                Some(cmd @ (Command::StartShare { .. } | Command::StartSharePicked(_))) => {
                     sharer = None;
                     let tx = video_tx.clone();
                     let sink = move |frame| { let _ = tx.send(frame); };
-                    let started = if monitor == TEST_PATTERN { Sharer::test_pattern(sink) } else { Sharer::start(monitor, sink) };
+                    let started = match cmd {
+                        Command::StartShare { monitor } if monitor == TEST_PATTERN => Sharer::test_pattern(sink),
+                        Command::StartShare { monitor } => Sharer::start(monitor, sink),
+                        Command::StartSharePicked(picked) => start_picked(picked, sink),
+                        _ => unreachable!(),
+                    };
                     match started {
                         Ok(s) => {
                             sharer = Some(s);
@@ -481,6 +511,14 @@ async fn session(
                 let _ = events.send(Event::Media(status));
             }
             _ = tick.tick() => {
+                // The system can end a capture by itself, as macOS does from its menu bar.
+                if sharer.as_ref().is_some_and(Sharer::ended) {
+                    sharer = None;
+                    let _ = events.send(Event::Sharing(false));
+                    let _ = events.send(Event::Log { error: false, text: "Screen sharing stopped".into() });
+                    let msg = ClientMsg::Sharing { sharing: false };
+                    let _ = ws_tx.send(Message::text(serde_json::to_string(&msg)?)).await;
+                }
                 let mut now: BTreeSet<ClientId> =
                     audio.mixer.talking(Duration::from_millis(250)).into_iter().collect();
                 now.remove(&crate::audio::LOOPBACK_PEER);

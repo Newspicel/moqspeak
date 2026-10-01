@@ -42,4 +42,4 @@ image = { version = "0.25", default-features = false, features = ["png"] }
 winresource = "0.1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-screencapturekit = "11"
+screencapturekit = { version = "11", features = ["macos_14_0"] }

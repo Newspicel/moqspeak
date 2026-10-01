@@ -485,6 +485,28 @@ impl AppState {
             self.send(Command::StopShare);
             return;
         }
+        #[cfg(target_os = "macos")]
+        tracing::debug!(
+            "share requested; system picker available: {}",
+            crate::screen::mac::picker_available()
+        );
+        #[cfg(target_os = "macos")]
+        if crate::screen::mac::picker_available() {
+            // Apple's picker chooses a window, an app or a display. Its answer arrives on another
+            // thread and comes back to this one through the UI handle.
+            let ui = ui();
+            let state = *self;
+            crate::screen::mac::pick(move |outcome| {
+                ui.post(move || match outcome {
+                    Ok(Some(picked)) => state.send(Command::StartSharePicked(
+                        crate::screen::Handoff::new(picked),
+                    )),
+                    Ok(None) => {}
+                    Err(e) => state.push_line(Tab::Server, LineKind::Error, format!("{e:#}")),
+                });
+            });
+            return;
+        }
         let monitors = crate::screen::list_monitors();
         match monitors.len() {
             0 => self.push_line(

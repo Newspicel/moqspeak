@@ -1,6 +1,11 @@
-//! Embeds the application icon into the Windows executable.
+//! Embeds the application icon into the Windows executable, and lets the macOS binary find the
+//! Swift runtime that ScreenCaptureKit's bridge links against.
 
 fn main() {
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
+        // A dependency's link arguments do not reach the final binary, so the rpath goes here.
+        println!("cargo:rustc-link-arg=-Wl,-rpath,/usr/lib/swift");
+    }
     println!("cargo:rerun-if-changed=../packaging/icon/moqspeak.ico");
     #[cfg(windows)]
     {
