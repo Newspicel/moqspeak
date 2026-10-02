@@ -5,6 +5,7 @@
 
 mod audio;
 mod bot;
+mod desktop;
 mod engine;
 mod identity;
 mod media;
@@ -61,7 +62,7 @@ fn main() -> Result<(), zgui::Error> {
         // Pop-out screen windows have no life of their own.
         .with_exit_policy(ExitPolicy::WhenPrimaryCloses)
         .with_stylesheet(ui::sheet())
-        .run(move || {
+        .run_on(desktop::run, move || {
             let (engine, mut events) = boot.take().expect("one main window");
             let state = AppState::new(engine);
             provide_local_context(state);
