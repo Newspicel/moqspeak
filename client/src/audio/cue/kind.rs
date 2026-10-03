@@ -73,93 +73,93 @@ impl Cue {
             room,
         };
         match self {
-            // A fourth around A5.
+            // A fourth around F#5.
             Cue::Unmute => soft(
-                vec![s(0.0, 76.0, 0.1), s(0.07, 81.0, 0.12).bend(-0.6)],
+                vec![s(0.0, 73.0, 0.1), s(0.07, 78.0, 0.12).bend(-0.6)],
                 0.3,
                 0.18,
             ),
             Cue::Mute => soft(
-                vec![s(0.0, 81.0, 0.1), s(0.07, 76.0, 0.12).bend(0.6)],
+                vec![s(0.0, 78.0, 0.1), s(0.07, 73.0, 0.12).bend(0.6)],
                 0.3,
                 0.18,
             ),
-            // An octave on D, longer than the microphone.
+            // An octave on B, longer than the microphone.
             Cue::Undeafen => soft(
-                vec![s(0.0, 74.0, 0.12), s(0.08, 86.0, 0.16).bend(-0.8)],
+                vec![s(0.0, 71.0, 0.12), s(0.08, 83.0, 0.16).bend(-0.8)],
                 0.32,
                 0.2,
             ),
             Cue::Deafen => soft(
-                vec![s(0.0, 86.0, 0.12), s(0.08, 74.0, 0.16).bend(0.8)],
+                vec![s(0.0, 83.0, 0.12), s(0.08, 71.0, 0.16).bend(0.8)],
                 0.32,
                 0.2,
             ),
-            // A fifth on C that swoops into each note.
+            // A fifth on A that swoops into each note.
             Cue::PeerJoin => soft(
                 vec![
-                    s(0.0, 72.0, 0.11).bend(-2.0),
-                    s(0.075, 79.0, 0.15).bend(-2.0),
+                    s(0.0, 69.0, 0.11).bend(-2.0),
+                    s(0.075, 76.0, 0.15).bend(-2.0),
                 ],
                 0.28,
                 0.22,
             ),
             Cue::PeerLeave => soft(
-                vec![s(0.0, 79.0, 0.11).bend(2.0), s(0.075, 72.0, 0.15).bend(2.0)],
+                vec![s(0.0, 76.0, 0.11).bend(2.0), s(0.075, 69.0, 0.15).bend(2.0)],
                 0.26,
                 0.22,
             ),
             // A quick rising triad.
             Cue::Move => soft(
                 vec![
-                    s(0.0, 72.0, 0.1),
-                    s(0.05, 76.0, 0.1),
-                    s(0.1, 79.0, 0.16).bend(-0.5),
+                    s(0.0, 69.0, 0.1),
+                    s(0.05, 73.0, 0.1),
+                    s(0.1, 76.0, 0.16).bend(-0.5),
                 ],
                 0.28,
                 0.24,
             ),
-            // A rising C major arpeggio with a long ring.
+            // A rising A major arpeggio with a long ring.
             Cue::Connect => soft(
                 vec![
-                    s(0.0, 72.0, 0.18),
-                    s(0.07, 76.0, 0.18),
-                    s(0.14, 79.0, 0.18),
-                    s(0.21, 84.0, 0.24).gain(0.9),
+                    s(0.0, 69.0, 0.18),
+                    s(0.07, 73.0, 0.18),
+                    s(0.14, 76.0, 0.18),
+                    s(0.21, 81.0, 0.24).gain(0.9),
                 ],
                 0.3,
                 0.3,
             ),
             Cue::Disconnect => soft(
                 vec![
-                    s(0.0, 79.0, 0.16),
-                    s(0.08, 76.0, 0.16),
-                    s(0.16, 72.0, 0.26).bend(0.5),
+                    s(0.0, 76.0, 0.16),
+                    s(0.08, 73.0, 0.16),
+                    s(0.16, 69.0, 0.26).bend(0.5),
                 ],
                 0.28,
                 0.3,
             ),
             // Two knocks on a high bell.
             Cue::Poke => glass(
-                vec![s(0.0, 93.0, 0.14), s(0.13, 93.0, 0.22).gain(0.9)],
+                vec![s(0.0, 90.0, 0.14), s(0.13, 90.0, 0.22).gain(0.9)],
                 0.3,
                 0.22,
             ),
             // A bright ding that rises a fifth.
             Cue::Message => glass(
-                vec![s(0.0, 88.0, 0.12).gain(0.7), s(0.05, 95.0, 0.2)],
+                vec![s(0.0, 85.0, 0.12).gain(0.7), s(0.05, 92.0, 0.2)],
                 0.26,
                 0.24,
             ),
             // Short blips with no room, quiet enough to repeat all day.
-            Cue::TalkOn => soft(vec![s(0.0, 86.0, 0.035).bend(-1.5)], 0.15, 0.0),
-            Cue::TalkOff => soft(vec![s(0.0, 81.0, 0.035).bend(1.5)], 0.13, 0.0),
+            Cue::TalkOn => soft(vec![s(0.0, 83.0, 0.035).bend(-1.5)], 0.15, 0.0),
+            Cue::TalkOff => soft(vec![s(0.0, 78.0, 0.035).bend(1.5)], 0.13, 0.0),
             #[cfg(feature = "screen-share")]
             Cue::ShareOn => soft(
                 vec![
-                    s(0.0, 79.0, 0.12),
-                    s(0.06, 86.0, 0.12),
-                    s(0.12, 91.0, 0.2).gain(0.8),
+                    s(0.0, 76.0, 0.12),
+                    s(0.06, 83.0, 0.12),
+                    s(0.12, 88.0, 0.2).gain(0.8),
                 ],
                 0.28,
                 0.26,
@@ -167,9 +167,9 @@ impl Cue {
             #[cfg(feature = "screen-share")]
             Cue::ShareOff => soft(
                 vec![
-                    s(0.0, 91.0, 0.12).gain(0.8),
-                    s(0.06, 86.0, 0.12),
-                    s(0.12, 79.0, 0.2),
+                    s(0.0, 88.0, 0.12).gain(0.8),
+                    s(0.06, 83.0, 0.12),
+                    s(0.12, 76.0, 0.2),
                 ],
                 0.26,
                 0.26,
