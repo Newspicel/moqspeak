@@ -74,6 +74,8 @@ pub struct AudioShared {
     pub input_gain: AtomicF32,
     /// Linear output volume.
     pub master_volume: AtomicF32,
+    /// Linear volume of the interface sounds, before the output volume.
+    pub cue_volume: AtomicF32,
     /// Current microphone level in dBFS, after gain.
     pub level_db: AtomicF32,
     /// Whether the encoder is sending right now.
@@ -99,6 +101,7 @@ impl AudioShared {
             loopback: AtomicBool::new(false),
             input_gain: AtomicF32::new(1.0),
             master_volume: AtomicF32::new(1.0),
+            cue_volume: AtomicF32::new(0.6),
             level_db: AtomicF32::new(-100.0),
             transmitting: AtomicBool::new(false),
             noise_suppression: AtomicBool::new(true),
@@ -222,6 +225,7 @@ pub struct Mixer {
     peers: Mutex<HashMap<u64, Peer>>,
     /// What went to the speakers, at the codec rate, for the echo canceller.
     played: Mutex<VecDeque<f32>>,
+    cues: Mutex<cue::CuePlayer>,
 }
 
 impl Mixer {
@@ -285,10 +289,20 @@ impl Mixer {
         }
     }
 
-    /// Records what the speakers played, scaled by the output volume.
-    fn record_played(&self, samples: &[f32], volume: f32) {
+    /// Starts an interface sound.
+    pub fn cue(&self, cue: Cue) {
+        self.cues.lock().unwrap().play(cue);
+    }
+
+    /// Adds `out.len()` samples of the interface sounds at the codec rate.
+    fn mix_cues(&self, out: &mut [f32]) {
+        self.cues.lock().unwrap().mix_into(out);
+    }
+
+    /// Records what the speakers played.
+    fn record_played(&self, samples: &[f32]) {
         let mut played = self.played.lock().unwrap();
-        played.extend(samples.iter().map(|s| s * volume));
+        played.extend(samples);
         // Keep at most half a second; a canceller that falls this far behind starts over.
         let excess = played.len().saturating_sub(RATE as usize / 2);
         played.drain(..excess);
@@ -341,9 +355,11 @@ impl Resampler {
     }
 }
 
+mod cue;
 mod devices;
 mod processing;
 
+pub use cue::Cue;
 pub use devices::{DeviceInfo, list_devices};
 
 /// Owns the device streams on a thread of their own and the encoder on another.
@@ -370,6 +386,7 @@ impl Audio {
         input: Option<String>,
         output: Option<String>,
     ) -> Self {
+        cue::prepare();
         let shared = AudioShared::new();
         let mixer = Arc::new(Mixer::default());
         let (frame_tx, frame_rx) = std::sync::mpsc::channel::<Vec<f32>>();

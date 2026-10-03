@@ -5,10 +5,12 @@ use std::collections::BTreeSet;
 
 use zgui::prelude::*;
 
+use crate::audio::Cue;
 use crate::engine::{ConnStatus, Event, MediaStatus};
 use crate::model::{ChatTarget, ClientMsg};
 use crate::ui::state::app::AppState;
 use crate::ui::state::chat::{Conversation, MessageKind};
+use crate::ui::state::cues::tree_cue;
 use crate::ui::state::log::Tone;
 use crate::ui::state::note::{Level, Note};
 use crate::ui::state::pointer::Selection;
@@ -69,9 +71,16 @@ impl AppState {
                 {
                     self.selected.set(Selection::Client(c.id));
                 }
+                let cue = self.me.get_untracked().and_then(|me| {
+                    self.clients
+                        .with_untracked(|before| tree_cue(before, &clients, me))
+                });
                 self.server.set(server);
                 self.channels.set(channels);
                 self.clients.set(clients);
+                if let Some(cue) = cue {
+                    self.cue(cue);
+                }
             }
             Event::Log { error, text } => {
                 if error {
@@ -98,6 +107,9 @@ impl AppState {
                             .map(|c| c.name)
                             .unwrap_or(from_name.clone());
                         self.chat.update(|c| c.add_direct(peer, name));
+                        if !own {
+                            self.cue(Cue::Message);
+                        }
                         Conversation::Private(peer)
                     }
                 };
@@ -119,6 +131,7 @@ impl AppState {
                 ..
             } => {
                 self.log_line(Tone::Event, format!("{from_name} poked you"));
+                self.cue(Cue::Poke);
                 self.note(Note {
                     level: Level::Info,
                     title: format!("{from_name} poked you"),
@@ -128,7 +141,12 @@ impl AppState {
             }
             Event::Talking(set) => self.talking.set(set),
             #[cfg(feature = "screen-share")]
-            Event::Sharing(on) => self.sharing.set(on),
+            Event::Sharing(on) => {
+                if on != self.sharing.get_untracked() {
+                    self.cue(if on { Cue::ShareOn } else { Cue::ShareOff });
+                }
+                self.sharing.set(on);
+            }
             Event::Media(status) => {
                 let was = matches!(self.media.get_untracked(), MediaStatus::Connected { .. });
                 match &status {
@@ -146,6 +164,11 @@ impl AppState {
     }
 
     fn apply_status(&self, status: ConnStatus) {
+        let was = self.status.with_untracked(|s| *s == ConnStatus::Connected);
+        let now = status == ConnStatus::Connected;
+        if was != now {
+            self.cue(if now { Cue::Connect } else { Cue::Disconnect });
+        }
         match &status {
             ConnStatus::Connected => self.connected_at.set(Some(std::time::Instant::now())),
             ConnStatus::Connecting(_) => {}

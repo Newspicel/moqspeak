@@ -208,17 +208,21 @@ fn open_output(
     let mut resampler = Resampler::new(RATE, device_rate);
     let mut pending: VecDeque<f32> = VecDeque::new();
     let mut codec = vec![0f32; FRAME];
+    let mut cues = vec![0f32; FRAME];
     let mut converted = Vec::new();
 
     let stream = device.build_output_stream(
         stream_config,
         move |data: &mut [f32], _: &_| {
             let frames = data.len() / channels;
+            let master = shared.master_volume.get();
+            // Deafening silences the voices. The interface sounds stay audible.
             let volume = if shared.deafened.load(Ordering::Relaxed) {
                 0.0
             } else {
-                shared.master_volume.get()
+                master
             };
+            let cue_volume = shared.cue_volume.get() * master;
             while pending.len() < frames {
                 // Mix in small codec-rate blocks so latency stays low.
                 let want = ((frames - pending.len()) as f64 * RATE as f64 / device_rate as f64)
@@ -226,13 +230,19 @@ fn open_output(
                     .clamp(16.0, FRAME as f64) as usize;
                 codec.resize(want, 0.0);
                 mixer.mix(&mut codec);
-                mixer.record_played(&codec, volume);
+                cues.clear();
+                cues.resize(want, 0.0);
+                mixer.mix_cues(&mut cues);
+                for (s, c) in codec.iter_mut().zip(&cues) {
+                    *s = *s * volume + c * cue_volume;
+                }
+                mixer.record_played(&codec);
                 converted.clear();
                 resampler.process(&codec, &mut converted);
                 pending.extend(converted.iter());
             }
             for frame in data.chunks_mut(channels) {
-                let s = (pending.pop_front().unwrap_or(0.0) * volume).clamp(-1.0, 1.0);
+                let s = pending.pop_front().unwrap_or(0.0).clamp(-1.0, 1.0);
                 frame.fill(s);
             }
         },

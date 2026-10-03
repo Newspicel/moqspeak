@@ -2,7 +2,7 @@
 
 use std::sync::atomic::Ordering;
 
-use crate::audio::VoiceMode;
+use crate::audio::{Cue, VoiceMode};
 use crate::engine::Command;
 use crate::model::{ChannelId, ChatTarget, ClientId, ClientMsg};
 use crate::ui::state::app::AppState;
@@ -64,6 +64,7 @@ impl AppState {
 
     pub fn set_mic_muted(&self, muted: bool) {
         self.mic_muted.set(muted);
+        self.cue(if muted { Cue::Mute } else { Cue::Unmute });
         self.engine
             .with_value(|e| e.audio.shared.mic_muted.store(muted, Ordering::Relaxed));
         self.msg(ClientMsg::Status {
@@ -76,6 +77,7 @@ impl AppState {
 
     pub fn set_deafened(&self, deaf: bool) {
         self.deafened.set(deaf);
+        self.cue(if deaf { Cue::Deafen } else { Cue::Undeafen });
         self.engine
             .with_value(|e| e.audio.shared.deafened.store(deaf, Ordering::Relaxed));
         self.msg(ClientMsg::Status {
@@ -101,6 +103,9 @@ impl AppState {
             self.ptt.set(down);
             self.engine
                 .with_value(|e| e.audio.shared.ptt_down.store(down, Ordering::Relaxed));
+            if self.voice_mode.get_untracked() == VoiceMode::PushToTalk {
+                self.cue(if down { Cue::TalkOn } else { Cue::TalkOff });
+            }
         }
     }
 

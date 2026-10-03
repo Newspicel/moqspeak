@@ -4,6 +4,7 @@ mod actions;
 mod app;
 mod apply;
 mod chat;
+mod cues;
 mod log;
 mod modal;
 mod note;

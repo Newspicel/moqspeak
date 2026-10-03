@@ -32,6 +32,10 @@ pub struct Settings {
     pub threshold_db: f32,
     pub input_gain: f32,
     pub output_volume: f32,
+    /// Whether the interface plays sounds.
+    pub sounds: bool,
+    /// Linear volume of the interface sounds.
+    pub sound_volume: f32,
     pub input_device: Option<String>,
     pub output_device: Option<String>,
     /// The surface: "system", "dark" or "light".
@@ -62,6 +66,8 @@ impl Default for Settings {
             threshold_db: -50.0,
             input_gain: 1.0,
             output_volume: 1.0,
+            sounds: true,
+            sound_volume: 0.6,
             input_device: None,
             output_device: None,
             theme_mode: Scheme::Dark.name().into(),

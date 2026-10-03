@@ -74,6 +74,7 @@ impl AppState {
         audio.threshold_db.set(settings.threshold_db);
         audio.input_gain.set(settings.input_gain);
         audio.master_volume.set(settings.output_volume);
+        audio.cue_volume.set(settings.sound_volume);
         audio
             .noise_suppression
             .store(settings.noise_suppression, Ordering::Relaxed);
