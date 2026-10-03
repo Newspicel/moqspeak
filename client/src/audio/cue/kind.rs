@@ -84,16 +84,16 @@ impl Cue {
                 0.3,
                 0.18,
             ),
-            // An octave on B, longer than the microphone.
+            // A fifth between A4 and E5, below the microphone and longer.
             Cue::Undeafen => soft(
-                vec![s(0.0, 71.0, 0.12), s(0.08, 83.0, 0.16).bend(-0.8)],
-                0.32,
-                0.2,
+                vec![s(0.0, 69.0, 0.14).gain(0.8), s(0.09, 76.0, 0.2)],
+                0.3,
+                0.22,
             ),
             Cue::Deafen => soft(
-                vec![s(0.0, 83.0, 0.12), s(0.08, 71.0, 0.16).bend(0.8)],
-                0.32,
-                0.2,
+                vec![s(0.0, 76.0, 0.14), s(0.09, 69.0, 0.2).gain(0.9)],
+                0.3,
+                0.22,
             ),
             // A fifth on A that swoops into each note.
             Cue::PeerJoin => soft(
