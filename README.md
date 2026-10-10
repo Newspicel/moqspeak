@@ -1,26 +1,35 @@
 # moqspeak
 
 **Media over QUIC Speak** is a voice chat app in the spirit of TeamSpeak: servers with a channel
-tree, push-to-talk or voice activation, chat, pokes and screen sharing. It is a native Rust
+tree, push-to-talk or voice activation, text chat, pokes and screen sharing. It is a native Rust
 application built on [zgui](https://github.com/zortax/zgui). Voice and video travel over
-[Media over QUIC](https://github.com/moq-dev/moq) through Cloudflare's MoQ relay, and a small
+[Media over QUIC](https://github.com/moq-dev/moq) through Cloudflare's MoQ relay. A small
 Cloudflare Worker keeps track of servers, channels and who is where.
 
-![moqspeak sharing a window](docs/screenshot.png)
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/screenshot-light.png">
+  <img src="docs/screenshot-dark.png" alt="moqspeak connected to a server: the channel tree with two people talking in the Lobby, the voice controls below it, the log and the channel chat">
+</picture>
 
 ## Features
 
-- **Channels the TeamSpeak way.** Double-click a channel to join it. Drag yourself or someone else
-  onto another channel to move. Right-click anything for its actions.
+- **Channels the TeamSpeak way.** Double-click a channel to join it. Drag someone onto another
+  channel to move them. Right-click anything for its actions.
 - **Clear voice.** Opus with forward error correction, echo cancellation (WebRTC AEC3), noise
-  suppression (RNNoise) and a neural speech detector that opens the microphone only for your
-  voice. Push-to-talk and continuous transmission are available too.
-- **Screen sharing.** On macOS, Apple's picker lets you share a single window, an app or a display.
-  On Linux and Windows a display is shared. Viewers watch in a separate window. Video is AV1.
+  suppression (RNNoise) and a speech detector that opens the microphone for your voice alone.
+  Choose voice activation, push-to-talk or continuous transmission.
+- **Chat.** One conversation for your channel, one for the whole server, and private
+  conversations with anyone. The chat column opens when a message arrives.
+- **Pokes.** A short message that pops up on someone's screen.
+- **Interface sounds.** Short generated tones for mute, deafen, joins, moves, pokes and messages.
+- **Per-person controls.** Local volume (0–200 %) and local mute for everyone you hear.
 - **Roles.** Users, moderators and admins. The first person on a new server becomes its admin.
-- **Per-user controls.** Local volume (0–200 %) and local mute for everyone you hear, from their menu.
-- **Your devices.** Choose microphone and speakers in Settings; changes apply immediately.
-- **Themes.** Jellybeans and 25 other palettes, each at a light and a dark surface.
+- **Saved servers.** Keep the servers you use and switch between them from the server menu.
+- **Screen sharing** (opt-in at build time). On macOS, Apple's picker shares a single window, an
+  app or a display. On Linux and Windows, a display is shared. Viewers watch in a separate
+  window. Video is AV1.
+- **Themes.** Jellybeans and 25 other palettes, each with a light and a dark surface, or one that
+  follows the system.
 
 ## Install
 
@@ -33,32 +42,43 @@ Download the build for your system from
 | Windows (x86-64) | `moqspeak-windows-x86_64.zip` |
 | Linux (x86-64) | `moqspeak-linux-x86_64.tar.gz` |
 
-On first start, macOS asks for microphone access. It asks for screen recording access the first
-time you share.
+On first start, macOS asks for microphone access.
+
+The release builds leave out screen sharing. To use it, [build from source](#building-from-source)
+with the `screen-share` feature.
 
 ## Using moqspeak
 
-Enter a server address on the start page, such as
-`moq.newspicel.dev/public`. The part after the slash is the server's name. Any name
-works, and a new name creates a new server with a default set of channels.
+Enter a server address and a nickname on the start page, for example
+`moq.newspicel.dev/public`. The part after the slash is the server's name. Any name works: a new
+name creates a new server with a default set of channels.
 
 | To | Do |
 |---|---|
 | Join a channel | Double-click it, or select it and press Enter |
-| Move someone (moderators) | Drag them onto a channel |
-| Talk with push-to-talk | Hold F1, or `` ` `` while not typing |
+| Fold a channel | Click its arrow, or press ← and → |
+| Talk with push-to-talk | Hold F1, hold `` ` `` while you are not typing, or hold the talk key in the pill |
+| Mute, turn sound off, set away | The keys in the pill at the foot of the channel tree |
+| Hear yourself, disconnect | Your name at the start of the pill |
 | Message someone | Double-click them |
-| Poke, mute locally, kick, change role | Right-click them |
-| Mute, sound off, away | The keys in the pill at the foot of the channel list |
-| Show the chat or the log | The keys at the top right |
-| Switch servers, save one | The server name at the top left |
-| Share your screen | The screen key in the pill |
-| Change devices, voice detection, theme | The settings key in the pill |
+| Poke, change volume, mute for yourself | Right-click them |
+| Move someone (moderators) | Drag them onto a channel, or right-click and *Move to my channel* |
+| Create a channel (moderators) | The folder key at the top, or right-click a channel for a sub-channel |
+| Show the chat or the log | The keys at the top right of the channel tree |
+| Switch servers, save one, copy the address | The server name at the top left |
+| Share your screen | The screen key in the pill (`screen-share` builds) |
+| Change devices, voice mode, sounds, theme | The settings key in the pill |
 
-**Roles.** Moderators can create and edit channels, move people and kick them from a channel.
-Admins can also delete channels and give or take roles. Each installation has its own
-cryptographic identity (`identity.key`, next to the settings), so a role stays with the person
-who has it.
+**Roles.** Moderators can create channels, move people and kick them from a channel. Admins can
+also delete channels and give or take roles. Each installation has its own Ed25519 identity, so a
+role stays with the person who has it. The identity is the file `identity.key` beside
+`settings.json` in the configuration directory:
+
+| System | Directory |
+|---|---|
+| macOS | `~/Library/Application Support/dev.moqspeak.moqspeak/` |
+| Linux | `~/.config/moqspeak/` |
+| Windows | `%APPDATA%\moqspeak\moqspeak\config\` |
 
 ## How it works
 
@@ -73,15 +93,15 @@ who has it.
                   "screen" – AV1, a new group at every keyframe
 ```
 
-The **Worker** is the control plane. When a client connects, it proves its identity by signing a
-challenge, then receives the channel tree, the list of people and a token for the relay. Every
-change (a join, a move, a chat message) goes through the Worker. The Worker sends the new state to
-everyone on that server.
+The **Worker** is the control plane. A client connects, proves its identity by signing a
+challenge, and receives the channel tree, the list of people and a token for the relay. Every
+change (a join, a move, a chat message) goes through the Worker, and the Worker sends the new
+state to everyone on that server.
 
 The **relay** carries the media. Each client publishes one broadcast with an `audio` track and a
-`screen` track, and subscribes to the audio of everyone in its channel. Screens are fetched only
-while someone watches. A screen starts a new group at each keyframe, so a viewer who joins late
-sees a picture within about two seconds.
+`screen` track, and subscribes to the audio of everyone in its channel. A client fetches a screen
+only while someone watches it. A screen starts a new group at each keyframe, so a viewer who joins
+late sees a picture within about two seconds.
 
 Audio stays inside the client until it is encoded. The microphone signal passes through echo
 cancellation, noise suppression and speech detection before Opus encodes it. Incoming voices go
@@ -89,22 +109,24 @@ through a short jitter buffer and are mixed for the speakers.
 
 ## Building from source
 
-You need [rustup](https://rustup.rs), which installs the pinned nightly toolchain from
-`rust-toolchain.toml` automatically, plus `cmake` and `nasm`. Opus and the AV1 encoder's
-assembly are built from source.
+You need [rustup](https://rustup.rs), plus `cmake` and `nasm`. rustup installs the pinned nightly
+toolchain from `rust-toolchain.toml` on first use. Opus and the AV1 encoder's assembly are built
+from source.
 
-- **Linux** additionally needs the development packages listed in
-  `.github/workflows/build.yml` (ALSA, X11/Wayland, PipeWire, fontconfig).
-- **macOS** needs Xcode 16 or later (macOS 15 SDK) to build.
+- **Linux** also needs the development packages that `.github/workflows/build.yml` installs
+  (ALSA, X11 and Wayland, PipeWire, fontconfig, D-Bus, clang).
+- **macOS** needs Xcode 16 or later (the macOS 15 SDK). The app runs on macOS 14 and later.
 
 ```sh
-cargo run -p moqspeak --release                                    # start the app
+cargo run -p moqspeak --release                                   # start the app
 cargo run -p moqspeak --release -- moq.newspicel.dev/demo Ada     # connect at start
-cargo run -p moqspeak --release --features screen-share            # with screen sharing
+cargo run -p moqspeak --release --features screen-share           # with screen sharing
 ```
 
-Screen sharing is off by default. The `screen-share` feature builds it in: the capture, the AV1
-codec, the share key and the "Watch screen" item.
+The `screen-share` feature builds in the capture, the AV1 codec, the share key and the
+*Watch screen* item. Without it, none of these exist.
+
+`RUST_LOG` sets the log level, for example `RUST_LOG=moqspeak=debug`.
 
 To build and install the macOS app bundle:
 
@@ -114,18 +136,37 @@ packaging/macos/bundle.sh          # writes dist/moqspeak.app
 cp -R dist/moqspeak.app /Applications/
 ```
 
-For testing with one machine, start a headless participant. It joins a channel, beeps every two
-seconds and prints whom it hears. With `--share-pattern` it also shares a moving test pattern, in
-a build with the `screen-share` feature. With `--wander` it joins the next channel every few seconds.
+### Testing with bots
+
+A bot is a headless participant. It joins a server, moves to a channel, beeps every two seconds
+and prints whom it hears. Start a few beside the client to see a populated server:
 
 ```sh
-cargo run -p moqspeak --features screen-share -- --bot moq.newspicel.dev/demo BeepBot Lobby --share-pattern
+cargo run -p moqspeak --release -- --bot moq.newspicel.dev/demo Grace Lobby
+cargo run -p moqspeak --release -- --bot moq.newspicel.dev/demo Linus "General Talk" --wander
+cargo run -p moqspeak --release --features screen-share -- --bot moq.newspicel.dev/demo Ken Gaming --share-pattern
+```
+
+`--wander` joins the next channel every few seconds. `--share-pattern` shares a moving test
+pattern and needs the `screen-share` feature.
+
+### Checks
+
+```sh
+cargo fmt --check
+cargo clippy -p moqspeak
+cargo test -p moqspeak --locked
+cd server && pnpm check
 ```
 
 ## Hosting your own server
 
-The server is a Cloudflare Worker in `server/`. Set the relay in `server/wrangler.jsonc`
-(`MOQ_RELAY`, `MOQ_RELAY_ID`, `CF_ACCOUNT_ID`), then deploy:
+The server is the Cloudflare Worker in `server/`. In `server/wrangler.jsonc`, set:
+
+- `routes` to your own domain,
+- `MOQ_RELAY`, `MOQ_RELAY_ID` and `CF_ACCOUNT_ID` to your MoQ relay and account.
+
+Then deploy it with [Wrangler](https://developers.cloudflare.com/workers/wrangler/):
 
 ```sh
 cd server
@@ -133,26 +174,28 @@ pnpm install
 wrangler deploy
 ```
 
+Clients connect with `<your-domain>/<server-name>`. For local development, `wrangler dev` serves
+the Worker on `localhost:8787`, and the client connects to `localhost:8787/<server-name>`.
+
 Clients need a token for the relay. There are two ways to give them one:
 
-- **A fixed token.** Create one with
-  `cf realtime moq relays tokens create <relay-id> --operations publish subscribe` and store it with
-  `wrangler secret put MOQ_TOKEN`.
 - **Rotating tokens (recommended).** Store a Cloudflare API token that can manage MoQ relay
   tokens with `wrangler secret put CF_API_TOKEN`. The Worker then creates a token valid for
   24 hours, replaces it when less than six hours remain, and deletes expired ones. If rotation
   fails, it falls back to `MOQ_TOKEN` and logs why.
+- **A fixed token.** Create one with
+  `cf realtime moq relays tokens create <relay-id> --operations publish subscribe` and store it with
+  `wrangler secret put MOQ_TOKEN`.
 
-A relay accepts at most ten tokens, so all clients share the current token; it is not one token per
-session.
+A relay accepts at most ten tokens, so all clients share the current token.
 
 ## Releases
 
-Every push builds and tests on Linux, macOS and Windows. Pushing a tag such as `v0.2.0` also
-publishes a GitHub release with the three downloads above.
+Every push to `main` and every pull request builds and tests on Linux, macOS and Windows. Pushing
+a tag such as `v0.2.0` also publishes a GitHub release with the downloads above.
 
 macOS builds are signed with your Developer ID and notarized when these repository secrets exist.
-Without them, the app is signed ad hoc.
+Without them, the app is signed ad hoc, and Gatekeeper asks the user to approve it on first launch.
 
 | Secret | Contents |
 |---|---|
@@ -166,19 +209,21 @@ Without them, the app is signed ad hoc.
 
 | Path | Contents |
 |---|---|
-| `client/src/ui/` | The interface: one zgui component per file, and `style.css` |
-| `client/src/audio/` | Devices, Opus, mixing, echo cancellation, noise suppression, speech detection |
+| `client/src/ui/` | The interface, by feature: `tree`, `pill`, `head`, `chat`, `log`, `settings`, `home`, `dialogs`, `screen`, `theme` and the shared `state` |
+| `client/assets/` | The style sheets (`css/`), the themes (`themes/`) and the Lucide icons (`icons/`) |
+| `client/src/audio/` | Devices, Opus, mixing, voice processing and the interface sounds (`cue/`) |
 | `client/src/screen/` | Screen capture, AV1 encoding and decoding |
-| `client/src/media.rs` | Publishing and subscribing over Media over QUIC |
 | `client/src/engine.rs` | The network side: Worker connection, reconnects, sharing |
+| `client/src/media.rs` | Publishing and subscribing over Media over QUIC |
 | `client/src/identity.rs` | The Ed25519 identity |
+| `client/src/bot.rs` | The headless test participant |
 | `server/src/index.ts` | The Worker: servers, channels, roles and relay tokens |
 | `packaging/` | Icons, the macOS bundle script and the Linux desktop file |
 
 ## Known limitations
 
-- Anyone who can reach a server can join it. Roles control what people can do, not who can
-  enter. Server passwords are not implemented yet.
+- Anyone who knows a server's address can join it. Roles limit what people can do there. Server
+  passwords do not exist yet.
 - Screen sharing adds roughly a third of a second of delay, from the AV1 encoder.
 - macOS builds are Apple silicon only.
 
