@@ -16,6 +16,7 @@ use crate::model::{ChatTarget, Client, ClientId, Role};
 use crate::transport::ts3::commands::{self, Me};
 use crate::transport::ts3::identity;
 use crate::transport::ts3::roster::{Change, Roster};
+use crate::transport::ts3::version;
 use crate::transport::ts3::voice::Spurts;
 use crate::transport::{
     Capabilities, ConnStatus, Event, MediaStatus, Out, Session, Transport, address,
@@ -57,6 +58,7 @@ impl Transport for TeamSpeak {
             server_password: address.password.clone(),
             default_channel: address.channel.clone(),
             default_channel_password: address.channel_password.clone(),
+            version: version::for_this_system(),
             ..ClientOptions::default()
         };
         let mut client = ts3proto::Client::new(
@@ -89,14 +91,14 @@ impl Transport for TeamSpeak {
         let client = client;
 
         let mut roster = Roster::new(address.addr.clone());
-        roster
-            .fetch_channels(&client)
-            .await
-            .context("reading the channel list")?;
-        roster
-            .fetch_clients(&client)
-            .await
-            .context("reading the client list")?;
+        // A server that refuses a list has not broken the connection. Say so, carry on with what
+        // the notifications bring, and read the lists again at the next resync.
+        if let Err(e) = roster.fetch_channels(&client).await {
+            out.warn(format!("TeamSpeak: could not read the channel list ({e})"));
+        }
+        if let Err(e) = roster.fetch_clients(&client).await {
+            out.warn(format!("TeamSpeak: could not read the client list ({e})"));
+        }
 
         let my_id = client.client_id() as ClientId;
         let mut me = Me {
@@ -270,6 +272,12 @@ impl Transport for TeamSpeak {
                     }
                 }
                 _ = resync.tick() => {
+                    // A list the server refused earlier is worth asking for again.
+                    if roster.channels.is_empty()
+                        && let Err(e) = roster.fetch_channels(&client).await
+                    {
+                        tracing::warn!("resyncing the channel list: {e:#}");
+                    }
                     if let Err(e) = roster.fetch_clients(&client).await {
                         tracing::warn!("resyncing the client list: {e:#}");
                     } else {

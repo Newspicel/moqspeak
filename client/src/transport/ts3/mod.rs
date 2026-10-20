@@ -10,6 +10,7 @@ mod identity;
 mod roster;
 mod session;
 mod spacer;
+mod version;
 mod voice;
 
 pub use session::TeamSpeak;
