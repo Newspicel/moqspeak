@@ -46,6 +46,8 @@ struct HandlerCore {
     last_message_received: Instant,
     packet_counter: [u16; 9],
     generation_counter: [u32; 9],
+    recv_window_voice: GenerationWindow,
+    recv_window_voice_whisper: GenerationWindow,
     recv_window_command: GenerationWindow,
     recv_window_command_low: GenerationWindow,
     send_window_command: GenerationWindow,
@@ -61,6 +63,35 @@ struct HandlerCore {
 }
 
 impl HandlerCore {
+    fn new(crypt: Crypt, logger: Arc<dyn Logger>) -> Self {
+        let mut packet_counter = [0u16; 9];
+        packet_counter[PacketType::Command as usize] = 1;
+        packet_counter[PacketType::Init1 as usize] = 101;
+        let window = || GenerationWindow::new(1 << 16, RECEIVE_PACKET_WINDOW_SIZE);
+        Self {
+            crypt,
+            client_id: 0,
+            closed: false,
+            last_message_received: Instant::now(),
+            packet_counter,
+            generation_counter: [0u32; 9],
+            recv_window_voice: window(),
+            recv_window_voice_whisper: window(),
+            recv_window_command: window(),
+            recv_window_command_low: window(),
+            send_window_command: window(),
+            send_window_command_low: window(),
+            command_queue: HashMap::new(),
+            command_low_queue: HashMap::new(),
+            ack_manager: HashMap::new(),
+            init_packet_check: None,
+            next_command_id: 0,
+            next_command_low_id: 0,
+            pending_sends: Vec::new(),
+            logger,
+        }
+    }
+
     fn build_and_track_packet(
         &mut self,
         p_type: PacketType,
@@ -307,33 +338,10 @@ impl PacketHandler {
     }
 
     pub fn new(crypt: Crypt, logger: Arc<dyn Logger>) -> Self {
-        let mut packet_counter = [0u16; 9];
-        packet_counter[PacketType::Command as usize] = 1;
-        packet_counter[PacketType::Init1 as usize] = 101;
-
         Self {
             on_packet: Mutex::new(None),
             on_close: Mutex::new(None),
-            core: Arc::new(Mutex::new(HandlerCore {
-                crypt,
-                client_id: 0,
-                closed: false,
-                last_message_received: Instant::now(),
-                packet_counter,
-                generation_counter: [0u32; 9],
-                recv_window_command: GenerationWindow::new(1 << 16, RECEIVE_PACKET_WINDOW_SIZE),
-                recv_window_command_low: GenerationWindow::new(1 << 16, RECEIVE_PACKET_WINDOW_SIZE),
-                send_window_command: GenerationWindow::new(1 << 16, RECEIVE_PACKET_WINDOW_SIZE),
-                send_window_command_low: GenerationWindow::new(1 << 16, RECEIVE_PACKET_WINDOW_SIZE),
-                command_queue: HashMap::new(),
-                command_low_queue: HashMap::new(),
-                ack_manager: HashMap::new(),
-                init_packet_check: None,
-                next_command_id: 0,
-                next_command_low_id: 0,
-                pending_sends: Vec::new(),
-                logger: logger.clone(),
-            })),
+            core: Arc::new(Mutex::new(HandlerCore::new(crypt, logger))),
             send_tx: Arc::new(Mutex::new(None)),
             shutdown_tx: Arc::new(Mutex::new(None)),
             bg_handle: Mutex::new(None),
@@ -627,11 +635,22 @@ fn handle_raw_packet(c: &mut HandlerCore, raw: &[u8], on_packet: &Arc<Mutex<Opti
 
 fn resolve_generation(c: &HandlerCore, id: u16, p_type: u8) -> u32 {
     match p_type {
+        0 => c.recv_window_voice.get_generation(id as u32),
+        1 => c.recv_window_voice_whisper.get_generation(id as u32),
         2 => c.recv_window_command.get_generation(id as u32),
         3 => c.recv_window_command_low.get_generation(id as u32),
         6 => c.send_window_command.get_generation(id as u32),
         7 => c.send_window_command_low.get_generation(id as u32),
         _ => 0,
+    }
+}
+
+/// The receive window a voice packet counts against.
+fn voice_window(c: &mut HandlerCore, p_type: PacketType) -> Option<&mut GenerationWindow> {
+    match p_type {
+        PacketType::Voice => Some(&mut c.recv_window_voice),
+        PacketType::VoiceWhisper => Some(&mut c.recv_window_voice_whisper),
+        _ => None,
     }
 }
 
@@ -896,6 +915,14 @@ fn update_post_receive_state(c: &mut HandlerCore, p: &Packet) {
         return;
     }
 
+    // Voice carries no acknowledgement, so its window follows the frames that arrive. The id
+    // counts in 16 bits, and the generation it turns over on belongs to the decryption nonce.
+    if let Some(win) = voice_window(c, p_type)
+        && !win.is_old_packet(p.id as u32)
+    {
+        win.advance_to_excluded(p.id as u32);
+    }
+
     if (p_type == PacketType::Ack || p_type == PacketType::AckLow) && p.data.len() >= 2 {
         let ack_id = u16::from_be_bytes([p.data[0], p.data[1]]);
         let target_type = if p_type == PacketType::Ack {
@@ -1035,6 +1062,61 @@ mod tests {
     use super::*;
 
     const MAX_CHUNK: usize = MAX_OUT_PACKET_SIZE - HEADER_SIZE - TAG_SIZE;
+
+    fn core() -> HandlerCore {
+        let identity = crate::crypto::generate_identity(0);
+        HandlerCore::new(Crypt::new(identity), Arc::new(crate::types::ConsoleLogger))
+    }
+
+    fn voice_packet(id: u16) -> Packet {
+        Packet {
+            type_flagged: PacketType::Voice as u8,
+            id,
+            client_id: 0,
+            generation_id: 0,
+            data: Vec::new(),
+            received_at: Instant::now(),
+        }
+    }
+
+    /// A music channel streams without a pause, so the voice counter turns over about every 22
+    /// minutes. The generation it turns over on belongs to the decryption nonce, and voice
+    /// carries no acknowledgement to carry it.
+    #[test]
+    fn the_voice_generation_follows_the_counter_over_its_wraps() {
+        let mut c = core();
+        let mut seen = Vec::with_capacity(3 << 16);
+        for step in 0..(3u32 << 16) {
+            let id = step as u16;
+            seen.push(resolve_generation(&c, id, PacketType::Voice as u8));
+            update_post_receive_state(&mut c, &voice_packet(id));
+        }
+        assert_eq!(seen[0], 0);
+        assert_eq!(seen[0xffff], 0);
+        assert_eq!(seen[0x1_0000], 1);
+        assert_eq!(seen[0x1_ffff], 1);
+        assert_eq!(seen[0x2_0000], 2);
+        assert_eq!(seen[0x2_ffff], 2);
+    }
+
+    #[test]
+    fn a_lost_voice_frame_leaves_the_generation_alone() {
+        let mut c = core();
+        for id in [0u16, 1, 2, 40, 41] {
+            assert_eq!(resolve_generation(&c, id, PacketType::Voice as u8), 0);
+            update_post_receive_state(&mut c, &voice_packet(id));
+        }
+    }
+
+    #[test]
+    fn voice_and_whisper_count_their_generations_apart() {
+        let mut c = core();
+        for step in 0..(1u32 << 16) {
+            update_post_receive_state(&mut c, &voice_packet(step as u16));
+        }
+        assert_eq!(resolve_generation(&c, 0, PacketType::Voice as u8), 1);
+        assert_eq!(resolve_generation(&c, 0, PacketType::VoiceWhisper as u8), 0);
+    }
 
     #[test]
     fn oversized_command_is_split_within_the_packet_limit() {
