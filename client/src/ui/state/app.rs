@@ -57,6 +57,9 @@ pub struct AppState {
     pub pointer: RwSignal<(f32, f32)>,
     pub collapsed: RwSignal<BTreeSet<ChannelId>>,
     pub(super) last_click: StoredValue<Option<(Selection, std::time::Instant)>>,
+    /// What the person chose for the microphone. Turning the sound off mutes the microphone
+    /// without changing this, so turning the sound back on gives back the choice.
+    pub(super) mic_choice: StoredValue<bool>,
     /// The application root's owner. A window opened from deep inside the tree opens under it,
     /// because a window's handle state belongs to the owner `open` runs in.
     #[cfg(feature = "screen-share")]
@@ -119,6 +122,7 @@ impl AppState {
             pointer: RwSignal::new((0.0, 0.0)),
             collapsed: RwSignal::new(BTreeSet::new()),
             last_click: StoredValue::new(None),
+            mic_choice: StoredValue::new(false),
             #[cfg(feature = "screen-share")]
             root: StoredValue::new(
                 zgui::reactive::Owner::current()

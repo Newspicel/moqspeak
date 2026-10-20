@@ -111,6 +111,13 @@ impl AppState {
     }
 
     pub fn set_mic_muted(&self, muted: bool) {
+        self.mic_choice.set_value(muted);
+        // The sound being off holds the microphone down, so asking for the microphone back asks
+        // for the sound back with it.
+        if !muted && self.deafened.get_untracked() {
+            self.set_deafened(false);
+            return;
+        }
         self.mic_muted.set(muted);
         self.cue(if muted { Cue::Mute } else { Cue::Unmute });
         self.engine
@@ -123,13 +130,20 @@ impl AppState {
         });
     }
 
+    /// Turns the sound off or on. It takes the microphone with it, because somebody who hears
+    /// nothing cannot answer, and gives back the microphone it found.
     pub fn set_deafened(&self, deaf: bool) {
         self.deafened.set(deaf);
         self.cue(if deaf { Cue::Deafen } else { Cue::Undeafen });
-        self.engine
-            .with_value(|e| e.audio.shared.deafened.store(deaf, Ordering::Relaxed));
+        let muted = mic_muted(self.mic_choice.get_value(), deaf);
+        self.mic_muted.set(muted);
+        self.engine.with_value(|e| {
+            e.audio.shared.deafened.store(deaf, Ordering::Relaxed);
+            e.audio.shared.mic_muted.store(muted, Ordering::Relaxed);
+        });
+        // One message carries both, so a server never sees a half-changed client.
         self.msg(Action::Status {
-            muted: None,
+            muted: Some(muted),
             deaf: Some(deaf),
             away: None,
             away_message: None,
@@ -296,5 +310,29 @@ impl AppState {
             Conversation::Private(id) => (ChatTarget::Client, Some(id)),
         };
         self.msg(Action::Chat { target, to, text });
+    }
+}
+
+/// Whether the microphone is muted, from what the person chose for it and whether the sound is
+/// off. The sound being off holds the microphone down, whatever the choice was.
+pub(super) fn mic_muted(choice: bool, deafened: bool) -> bool {
+    deafened || choice
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_sound_going_off_takes_the_microphone_with_it() {
+        assert!(mic_muted(false, true));
+        assert!(mic_muted(true, true));
+    }
+
+    #[test]
+    fn the_sound_coming_back_gives_back_the_choice() {
+        assert!(!mic_muted(false, false));
+        // Somebody who muted the microphone first keeps it muted.
+        assert!(mic_muted(true, false));
     }
 }
