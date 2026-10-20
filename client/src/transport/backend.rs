@@ -1,6 +1,7 @@
 //! The contract a transport meets. Each one owns its session loop and reaches the rest of the
 //! client only through the commands it reads, the events it sends and the audio it is handed.
 
+use std::cell::Cell;
 use std::sync::Arc;
 
 use anyhow::Result;
@@ -52,6 +53,9 @@ pub struct Session<'a> {
     pub commands: &'a mut UnboundedReceiver<Command>,
     pub packets: &'a mut UnboundedReceiver<Packet>,
     pub out: Out,
+    /// Set by the transport once the server has taken it. Only a session that reached this is
+    /// worth reconnecting, so a bad address fails at once instead of retrying for a minute.
+    pub reached: &'a Cell<bool>,
 }
 
 /// One way of reaching a server.

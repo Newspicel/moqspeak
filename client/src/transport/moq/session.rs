@@ -39,6 +39,7 @@ impl Transport for Worker {
             commands,
             packets,
             out,
+            reached,
         } = session;
 
         out.log(format!("Connecting to {}…", address.server));
@@ -93,6 +94,7 @@ impl Transport for Worker {
                             ws_tx.send(Message::text(serde_json::to_string(&auth)?)).await?;
                         }
                         ServerMsg::Welcome { you, relay, token } => {
+                            reached.set(true);
                             out.emit(Event::Status(ConnStatus::Connected));
                             out.emit(Event::Welcome { you: you.clone() });
                             out.emit(Event::Media(MediaStatus::Connecting));

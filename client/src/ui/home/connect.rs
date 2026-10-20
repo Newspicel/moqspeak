@@ -36,6 +36,7 @@ pub fn ConnectField() -> impl IntoView {
         }
     };
     let connecting = move || matches!(state.status.get(), ConnStatus::Connecting(_));
+    let busy = Signal::derive_local(connecting);
     let status = move || match state.status.get() {
         ConnStatus::Connecting(server) => Some((format!("Connecting to {server}…"), "")),
         ConnStatus::Failed(e) => Some((format!("Connection failed: {e}"), "err")),
@@ -46,11 +47,11 @@ pub fn ConnectField() -> impl IntoView {
         column(class = "ms-connect") {
             row(class = "ms-connect__line") {
                 text(class = "ms-connect__label") {"Server"}
-                Input(value = address, label = "Server address", placeholder = "host/server", class = "ms-connect__input", on:key_down = on_enter)
+                Input(value = address, label = "Server address", placeholder = "host/server", class = "ms-connect__input", disabled = busy, on:key_down = on_enter)
             }
             row(class = "ms-connect__line") {
                 text(class = "ms-connect__label") {"Nickname"}
-                Input(value = nickname, label = "Nickname", class = "ms-connect__input", on:key_down = on_enter)
+                Input(value = nickname, label = "Nickname", class = "ms-connect__input", disabled = busy, on:key_down = on_enter)
             }
         }
         row(class = "ms-home__actions") {
@@ -63,7 +64,20 @@ pub fn ConnectField() -> impl IntoView {
                 }
                 text(class = "ms-home__status-text") {{move || status().map(|(text, _)| text).unwrap_or_default()}}
             }
-            Button(variant = ButtonVariant::Outline, size = ButtonSize::Sm, class = "ms-accent-key", on:click = move |_| connect()) {"Connect"}
+            // While an attempt runs the key stops it, so a server that never answers is never a
+            // dead end.
+            Button(
+                variant = ButtonVariant::Outline,
+                size = ButtonSize::Sm,
+                class = "ms-accent-key",
+                on:click = move |_| {
+                    if matches!(state.status.get_untracked(), ConnStatus::Connecting(_)) {
+                        state.disconnect();
+                    } else {
+                        connect();
+                    }
+                }
+            ) {{move || if connecting() { "Cancel" } else { "Connect" }}}
         }
     }
 }

@@ -44,6 +44,7 @@ impl Transport for TeamSpeak {
             commands: ui_commands,
             packets,
             out,
+            reached,
         } = session;
 
         out.log(format!("Connecting to {} over TeamSpeak…", address.host));
@@ -88,6 +89,7 @@ impl Transport for TeamSpeak {
             .await
             .context("the TeamSpeak handshake timed out")?
             .context("the server refused the handshake")?;
+        reached.set(true);
         let client = client;
 
         let mut roster = Roster::new(address.addr.clone());

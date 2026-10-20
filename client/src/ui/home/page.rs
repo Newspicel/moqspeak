@@ -5,6 +5,7 @@ use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
 use crate::ui::home::connect::ConnectFieldProps;
+use crate::ui::home::recent::RecentListProps;
 use crate::ui::home::servers::ServerListProps;
 
 /// One centred column.
@@ -20,6 +21,7 @@ pub fn Home() -> impl IntoView {
                 }
                 ConnectField()
                 ServerList()
+                RecentList()
             }
             }
         }

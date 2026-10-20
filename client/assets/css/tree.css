@@ -19,14 +19,15 @@
 }
 
 /* One row's place. It glides to a new place, and fades in where a row appears. */
+/* A row stands at its place with `top`, not a transform: a transform would give the row a
+   coordinate space of its own, and a scrolled space of its own is one the pointer misses. */
 .ms-slot {
     position: absolute;
     top: 0;
     left: 0;
     right: 0;
     height: var(--ms-row);
-    transform: translate(0px, 0px);
-    transition: transform var(--ms-glide) var(--ms-ease);
+    transition: top var(--ms-glide) var(--ms-ease);
     animation: ms-slot-in var(--ms-glide) var(--ms-ease);
 }
 

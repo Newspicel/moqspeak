@@ -136,14 +136,18 @@ async fn run(
         match command {
             Command::Connect { address, nickname } => {
                 let started = std::time::Instant::now();
+                let reached = std::cell::Cell::new(false);
                 let outcome = connect(
-                    &audio,
-                    &identity,
+                    Wiring {
+                        audio: &audio,
+                        identity: &identity,
+                        out: &out,
+                    },
                     &address,
                     &nickname,
                     &mut commands,
-                    &out,
                     &mut packets,
+                    &reached,
                 )
                 .await;
                 // A session that held for a while earns a fresh set of retries.
@@ -156,7 +160,9 @@ async fn run(
                         out.emit(Event::Status(ConnStatus::Disconnected));
                         pending = next;
                     }
-                    Err(e) if attempts < MAX_RETRIES => {
+                    // Only a session the server took is worth reconnecting. An address that was
+                    // never answered fails at once, so a typo is not a minute of waiting.
+                    Err(e) if reached.get() && attempts < MAX_RETRIES => {
                         attempts += 1;
                         let wait = Duration::from_secs(1 << attempts.min(4));
                         out.warn(format!("{e:#}. Reconnecting in {} s…", wait.as_secs()));
@@ -198,16 +204,27 @@ async fn run(
     }
 }
 
+/// What every attempt borrows from the engine, which outlives all of them.
+struct Wiring<'a> {
+    audio: &'a Arc<Audio>,
+    identity: &'a Identity,
+    out: &'a Out,
+}
+
 /// Runs one session on whichever transport the address names.
 async fn connect(
-    audio: &Arc<Audio>,
-    identity: &Identity,
+    wiring: Wiring<'_>,
     address: &str,
     nickname: &str,
     commands: &mut UnboundedReceiver<Command>,
-    out: &Out,
     packets: &mut UnboundedReceiver<Packet>,
+    reached: &std::cell::Cell<bool>,
 ) -> Result<Option<Command>> {
+    let Wiring {
+        audio,
+        identity,
+        out,
+    } = wiring;
     let address = Address::parse(address)?;
     out.emit(Event::Status(ConnStatus::Connecting(
         address.label().to_owned(),
@@ -219,6 +236,7 @@ async fn connect(
         commands,
         packets,
         out: out.clone(),
+        reached,
     };
     match address {
         Address::Moq(a) => {

@@ -33,9 +33,9 @@ pub fn px(length: u32) -> Option<String> {
     Some(format!("{length}px"))
 }
 
-/// Where the row at `place` stands.
+/// Where the row at `place` stands, as its distance from the top of the field.
 fn offset(place: usize) -> Option<String> {
-    Some(format!("translate(0px, {}px)", place as f32 * ROW))
+    Some(format!("{}px", place as f32 * ROW))
 }
 
 /// The tree.
@@ -76,7 +76,7 @@ pub fn Tree() -> impl IntoView {
 fn slot(keys: Memo<Vec<RowKey>>, rows: Memo<Vec<Row>>, key: RowKey) -> AnyView {
     let place = move || keys.with(|keys| keys.iter().position(|k| *k == key).unwrap_or(0));
     view! {
-        box(class = "ms-slot", style:transform = move || offset(place())) {
+        box(class = "ms-slot", style:top = move || offset(place())) {
             {line(rows, key)}
         }
     }

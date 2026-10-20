@@ -28,6 +28,8 @@ pub struct Settings {
     pub nickname: String,
     pub address: String,
     pub bookmarks: Vec<Bookmark>,
+    /// The servers connected to before, newest first.
+    pub history: Vec<Bookmark>,
     pub voice_mode: String,
     pub threshold_db: f32,
     pub input_gain: f32,
@@ -62,6 +64,7 @@ impl Default for Settings {
                 address: DEFAULT_ADDRESS.into(),
                 nickname: String::new(),
             }],
+            history: Vec::new(),
             voice_mode: "activation".into(),
             threshold_db: -50.0,
             input_gain: 1.0,

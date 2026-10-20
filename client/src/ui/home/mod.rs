@@ -2,6 +2,7 @@
 
 mod connect;
 mod page;
+mod recent;
 mod servers;
 
 pub use crate::ui::home::page::HomeProps;

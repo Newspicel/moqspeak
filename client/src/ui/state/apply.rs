@@ -45,6 +45,9 @@ impl AppState {
                 clients,
             } => {
                 let first = self.channels.with_untracked(Vec::is_empty);
+                if first {
+                    self.remember_server(&server.name);
+                }
                 if first && !server.welcome.is_empty() {
                     let welcome = server.welcome.clone();
                     self.chat

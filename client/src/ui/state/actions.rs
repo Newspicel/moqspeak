@@ -56,6 +56,53 @@ impl AppState {
         self.update_settings(|s| s.bookmarks.retain(|b| b.address != address));
     }
 
+    /// Remembers the server just joined, newest first and each address once.
+    pub fn remember_server(&self, name: &str) {
+        /// How many servers the history keeps.
+        const KEEP: usize = 8;
+        let (address, nickname) = self
+            .settings
+            .with_untracked(|s| (s.address.clone(), s.nickname.clone()));
+        if address.is_empty() {
+            return;
+        }
+        let label = if name.is_empty() {
+            address.clone()
+        } else {
+            name.to_owned()
+        };
+        self.update_settings(|s| {
+            s.history.retain(|h| h.address != address);
+            s.history.insert(
+                0,
+                Bookmark {
+                    label,
+                    address: address.clone(),
+                    nickname: nickname.clone(),
+                },
+            );
+            s.history.truncate(KEEP);
+        });
+    }
+
+    /// Saves a server from the history, unless it is saved already.
+    pub fn save_server(&self, label: &str, address: &str) {
+        self.update_settings(|s| {
+            if s.bookmark_of(address).is_none() {
+                s.bookmarks.push(Bookmark {
+                    label: label.to_owned(),
+                    address: address.to_owned(),
+                    nickname: String::new(),
+                });
+            }
+        });
+    }
+
+    /// Drops one server from the history.
+    pub fn forget_server(&self, address: &str) {
+        self.update_settings(|s| s.history.retain(|h| h.address != address));
+    }
+
     pub fn join(&self, channel: ChannelId) {
         if self.my_client().is_some_and(|c| c.channel == channel) {
             return;
