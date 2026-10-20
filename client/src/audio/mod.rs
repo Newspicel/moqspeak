@@ -6,9 +6,7 @@
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, AtomicU8, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
-
-use anyhow::Result;
+use std::time::Duration;
 
 /// Codec sample rate.
 pub const RATE: u32 = 48_000;
@@ -147,78 +145,6 @@ impl Packet {
 
 // ---- playback mixer ------------------------------------------------------------------------
 
-/// How much audio a speaker buffers before playback starts.
-const PREBUFFER: usize = FRAME * 3;
-/// The most audio a speaker may hold before the oldest is dropped.
-const MAX_BUFFER: usize = FRAME * 12;
-
-struct Peer {
-    decoder: opus::Decoder,
-    queue: VecDeque<f32>,
-    next_seq: Option<u32>,
-    playing: bool,
-    volume: f32,
-    muted: bool,
-    last_packet: Instant,
-}
-
-impl Peer {
-    fn new() -> Result<Self> {
-        Ok(Self {
-            decoder: opus::Decoder::new(RATE, opus::Channels::Mono)?,
-            queue: VecDeque::with_capacity(MAX_BUFFER),
-            next_seq: None,
-            playing: false,
-            volume: 1.0,
-            muted: false,
-            last_packet: Instant::now() - Duration::from_secs(10),
-        })
-    }
-
-    fn push(&mut self, packet: &Packet) {
-        let mut pcm = [0f32; FRAME * 6];
-        // Conceal a short gap with the decoder's loss concealment; a long gap is a new spurt.
-        if let Some(expected) = self.next_seq {
-            let gap = packet.seq.wrapping_sub(expected);
-            if gap > 0 && gap <= 3 {
-                for _ in 0..gap {
-                    if let Ok(n) = self.decoder.decode_float(&[], &mut pcm[..FRAME], false) {
-                        self.queue.extend(&pcm[..n]);
-                    }
-                }
-            } else if gap > 3 && gap < u32::MAX / 2 {
-                self.playing = false;
-            } else if gap >= u32::MAX / 2 {
-                return; // late duplicate
-            }
-        }
-        self.next_seq = Some(packet.seq.wrapping_add(1));
-        if let Ok(n) = self.decoder.decode_float(&packet.data, &mut pcm, false) {
-            self.queue.extend(&pcm[..n]);
-        }
-        while self.queue.len() > MAX_BUFFER {
-            self.queue.pop_front();
-        }
-        if !self.playing && self.queue.len() >= PREBUFFER {
-            self.playing = true;
-        }
-        self.last_packet = Instant::now();
-    }
-
-    fn pull(&mut self) -> f32 {
-        if !self.playing {
-            return 0.0;
-        }
-        match self.queue.pop_front() {
-            Some(s) => s,
-            None => {
-                self.playing = false;
-                0.0
-            }
-        }
-    }
-}
-
 /// The remote speakers, keyed by client id.
 #[derive(Default)]
 pub struct Mixer {
@@ -267,12 +193,11 @@ impl Mixer {
 
     /// The peers that received audio within `window`.
     pub fn talking(&self, window: Duration) -> Vec<u64> {
-        let now = Instant::now();
         self.peers
             .lock()
             .unwrap()
             .iter()
-            .filter(|(_, p)| now.duration_since(p.last_packet) < window)
+            .filter(|(_, p)| p.heard_within(window))
             .map(|(id, _)| *id)
             .collect()
     }
@@ -282,7 +207,7 @@ impl Mixer {
         out.fill(0.0);
         let mut peers = self.peers.lock().unwrap();
         for peer in peers.values_mut() {
-            let gain = if peer.muted { 0.0 } else { peer.volume };
+            let gain = peer.gain();
             for s in out.iter_mut() {
                 *s += peer.pull() * gain;
             }
@@ -357,10 +282,12 @@ impl Resampler {
 
 mod cue;
 mod devices;
+mod peer;
 mod processing;
 
 pub use cue::Cue;
 pub use devices::{DeviceInfo, list_devices};
+use peer::Peer;
 
 /// Owns the device streams on a thread of their own and the encoder on another.
 pub struct Audio {
