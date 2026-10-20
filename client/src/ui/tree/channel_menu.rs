@@ -4,7 +4,8 @@ use zgui::prelude::*;
 use zgui::reactive::LocalStorage;
 use zgui_ui::prelude::*;
 
-use crate::model::{ChannelId, ClientMsg, Role};
+use crate::model::{ChannelId, Role};
+use crate::transport::Action;
 use crate::ui::parts::act;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::state::{AppState, ChannelRow, Modal};
@@ -25,18 +26,18 @@ pub fn ChannelMenu(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
                     text {{move || if row.with(|r| r.collapsed) { "Expand" } else { "Collapse" }}}
                 }
             }
-            if move || state.my_role() >= Role::Mod {
+            if move || state.can_channels() && state.may_moderate() {
                 MenuSeparator()
                 MenuItem(on_select = act(move || state.modal.set(Modal::CreateChannel { parent: Some(id) }))) {
                     Icon(svg = icons::FOLDER_PLUS, size = IconSize::Sm)
                     text {"New sub-channel…"}
                 }
             }
-            if move || state.my_role() >= Role::Admin {
+            if move || state.can_channels() && state.my_role() >= Role::Admin {
                 MenuItem(
                     destructive = true,
                     disabled = row.with_untracked(|r| r.is_default),
-                    on_select = act(move || state.msg(ClientMsg::DeleteChannel { id }))
+                    on_select = act(move || state.msg(Action::DeleteChannel { id }))
                 ) {
                     Icon(svg = icons::TRASH_2, size = IconSize::Sm)
                     text {"Delete channel"}

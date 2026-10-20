@@ -3,7 +3,7 @@
 use zgui::prelude::*;
 use zgui_ui::prelude::*;
 
-use crate::engine::ConnStatus;
+use crate::transport::ConnStatus;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::state::AppState;
 

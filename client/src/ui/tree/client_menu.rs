@@ -5,7 +5,8 @@ use zgui::prelude::*;
 use zgui::reactive::{LocalStorage, UnsyncCallback};
 use zgui_ui::prelude::*;
 
-use crate::model::{ClientId, ClientMsg, Role};
+use crate::model::{ClientId, Role};
+use crate::transport::Action;
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{Erase, act};
 use crate::ui::screen::WatchItemProps;
@@ -31,13 +32,25 @@ fn facts(state: AppState, id: ClientId) -> AnyView {
     let Some(client) = state.client(id) else {
         return ().any();
     };
-    let mut line = format!(
-        "{} · online {}",
-        client.role.label(),
-        since(client.connected_at)
-    );
+    let mut parts: Vec<String> = Vec::new();
+    // A transport without roles calls everybody the same thing, which tells nobody anything.
+    if state.can_roles() {
+        parts.push(client.role.label().to_owned());
+    }
+    if client.connected_at > 0 {
+        parts.push(format!("online {}", since(client.connected_at)));
+    }
     if !client.version.is_empty() {
-        line.push_str(&format!(" · {} {}", client.version, client.platform));
+        parts.push(format!("{} {}", client.version, client.platform));
+    }
+    let line = parts.join(" · ");
+    if line.is_empty() {
+        return view! {
+            column(class = "ms-menu-facts") {
+                text(class = "ms-menu-facts__name") {{client.name}}
+            }
+        }
+        .any();
     }
     view! {
         column(class = "ms-menu-facts") {
@@ -125,7 +138,7 @@ pub fn ClientMenu(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                 Icon(svg = Signal::derive_local(move || if locally_muted() { icons::VOLUME_2 } else { icons::VOLUME_X }), size = IconSize::Sm)
                 text {{move || if locally_muted() { "Unmute for me" } else { "Mute for me" }}}
             }
-            if move || state.my_role() >= Role::Mod {
+            if move || state.may_moderate() {
                 MenuSeparator()
                 MenuItem(on_select = act(move || {
                     if let Some(mine) = state.my_client() {
@@ -136,23 +149,23 @@ pub fn ClientMenu(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                     text {"Move to my channel"}
                 }
             }
-            if move || state.my_role() >= Role::Admin {
+            if move || state.can_roles() && state.my_role() >= Role::Admin {
                 MenuSub {
                     MenuSubTrigger {
                         Icon(svg = icons::SHIELD_USER, size = IconSize::Sm)
                         text {"Role"}
                     }
                     MenuSubContent {
-                        MenuItem(disabled = role() == Role::Admin, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Role::Admin }))) {"Admin"}
-                        MenuItem(disabled = role() == Role::Mod, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Role::Mod }))) {"Moderator"}
-                        MenuItem(disabled = role() == Role::User, on_select = act(move || state.msg(ClientMsg::SetRole { id, role: Role::User }))) {"User"}
+                        MenuItem(disabled = role() == Role::Admin, on_select = act(move || state.msg(Action::SetRole { id, role: Role::Admin }))) {"Admin"}
+                        MenuItem(disabled = role() == Role::Mod, on_select = act(move || state.msg(Action::SetRole { id, role: Role::Mod }))) {"Moderator"}
+                        MenuItem(disabled = role() == Role::User, on_select = act(move || state.msg(Action::SetRole { id, role: Role::User }))) {"User"}
                     }
                 }
             }
-            if move || state.my_role() >= Role::Mod {
+            if move || state.can_kick() && state.may_moderate() {
                 MenuItem(
                     destructive = true,
-                    on_select = act(move || state.msg(ClientMsg::Kick { id, reason: String::new() }))
+                    on_select = act(move || state.msg(Action::Kick { id, reason: String::new() }))
                 ) {
                     Icon(svg = icons::USER_X, size = IconSize::Sm)
                     text {"Kick from channel"}

@@ -14,10 +14,10 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
 
 use crate::audio::{Mixer, Packet};
-use crate::engine::MediaStatus;
 use crate::model::ClientId;
 #[cfg(feature = "screen-share")]
 use crate::screen::VideoFrame;
+use crate::transport::MediaStatus;
 
 /// The track every broadcast carries its voice on.
 pub const AUDIO_TRACK: &str = "audio";

@@ -4,7 +4,7 @@ use zgui::prelude::*;
 use zgui::reactive::StoredValue;
 use zgui_ui::prelude::*;
 
-use crate::model::ClientMsg;
+use crate::transport::Action;
 use crate::ui::state::{AppState, Modal};
 
 /// The message field.
@@ -18,7 +18,7 @@ pub fn PokeBody() -> impl IntoView {
     let text = RwSignal::new_local(String::new());
     let title = StoredValue::new(format!("Poke {name}"));
     let poke = move || {
-        state.msg(ClientMsg::Poke {
+        state.msg(Action::Poke {
             to,
             text: text.get_untracked(),
         });

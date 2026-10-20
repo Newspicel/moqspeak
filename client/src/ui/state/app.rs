@@ -7,8 +7,9 @@ use zgui::prelude::*;
 use zgui::reactive::StoredValue;
 
 use crate::audio::VoiceMode;
-use crate::engine::{Command, ConnStatus, Engine, MediaStatus};
-use crate::model::{Channel, ChannelId, Client, ClientId, ClientMsg, Role, ServerInfo};
+use crate::engine::{Command, Engine};
+use crate::model::{Channel, ChannelId, Client, ClientId, Role, ServerInfo};
+use crate::transport::{Action, Capabilities, ConnStatus, MediaStatus};
 use crate::ui::state::chat::Chat;
 use crate::ui::state::log::{Log, Tone};
 use crate::ui::state::modal::Modal;
@@ -23,6 +24,8 @@ pub struct AppState {
     pub engine: StoredValue<Engine>,
     pub status: RwSignal<ConnStatus>,
     pub media: RwSignal<MediaStatus>,
+    /// What the live transport can do. The interface offers only these.
+    pub caps: RwSignal<Capabilities>,
     pub server: RwSignal<ServerInfo>,
     pub channels: RwSignal<Vec<Channel>>,
     pub clients: RwSignal<Vec<Client>>,
@@ -86,6 +89,7 @@ impl AppState {
             engine: StoredValue::new(engine),
             status: RwSignal::new(ConnStatus::Disconnected),
             media: RwSignal::new(MediaStatus::Off),
+            caps: RwSignal::new(Capabilities::NONE),
             server: RwSignal::new(ServerInfo::default()),
             channels: RwSignal::new(Vec::new()),
             clients: RwSignal::new(Vec::new()),
@@ -136,7 +140,7 @@ impl AppState {
         let _ = self.engine.try_with_value(|e| e.send(command));
     }
 
-    pub fn msg(&self, msg: ClientMsg) {
+    pub fn msg(&self, msg: Action) {
         self.send(Command::Send(msg));
     }
 
@@ -158,6 +162,33 @@ impl AppState {
     /// What this client may do on the server it is connected to.
     pub fn my_role(&self) -> Role {
         self.my_client().map(|c| c.role).unwrap_or_default()
+    }
+
+    /// Whether the live transport creates, edits and deletes channels.
+    pub fn can_channels(&self) -> bool {
+        self.caps.with(|c| c.channels)
+    }
+
+    /// Whether the live transport assigns the roles this client knows.
+    pub fn can_roles(&self) -> bool {
+        self.caps.with(|c| c.roles)
+    }
+
+    /// Whether the live transport removes a client from the server.
+    pub fn can_kick(&self) -> bool {
+        self.caps.with(|c| c.kick)
+    }
+
+    /// Whether to offer what a moderator does. A transport that carries roles gates on mine. One
+    /// that does not leaves the decision to the server, which answers with an error where it
+    /// refuses.
+    pub fn may_moderate(&self) -> bool {
+        !self.can_roles() || self.my_role() >= Role::Mod
+    }
+
+    /// Whether to offer screen sharing. The key stays while offline, so the pill keeps its shape.
+    pub fn offers_share(&self) -> bool {
+        !self.connected() || self.caps.with(|c| c.screen_share)
     }
 
     pub fn my_role_untracked(&self) -> Role {

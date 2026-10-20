@@ -4,7 +4,7 @@ use zgui::prelude::*;
 use zgui::reactive::StoredValue;
 use zgui_ui::prelude::*;
 
-use crate::model::ClientMsg;
+use crate::transport::Action;
 use crate::ui::dialogs::host::FormRowProps;
 use crate::ui::state::{AppState, Modal};
 
@@ -29,7 +29,7 @@ pub fn CreateChannelBody() -> impl IntoView {
         if n.is_empty() {
             return;
         }
-        state.msg(ClientMsg::CreateChannel {
+        state.msg(Action::CreateChannel {
             name: n,
             topic: topic.get_untracked(),
             description: description.get_untracked(),

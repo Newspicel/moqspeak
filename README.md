@@ -28,6 +28,10 @@ Cloudflare Worker keeps track of servers, channels and who is where.
 - **Screen sharing** (opt-in at build time). On macOS, Apple's picker shares a single window, an
   app or a display. On Linux and Windows, a display is shared. Viewers watch in a separate
   window. Video is AV1.
+- **TeamSpeak 3 servers** (experimental). Give a `ts3server://` address and moqspeak speaks the
+  TeamSpeak 3 protocol instead: talk, move between channels, chat and poke, against a real
+  TeamSpeak server. The tree draws TeamSpeak's spacers, so a server keeps the shape it was
+  arranged in.
 - **Themes.** Jellybeans and 25 other palettes, each with a light and a dark surface, or one that
   follows the system.
 
@@ -52,6 +56,11 @@ with the `screen-share` feature.
 Enter a server address and a nickname on the start page, for example
 `moq.newspicel.dev/public`. The part after the slash is the server's name. Any name works: a new
 name creates a new server with a default set of channels.
+
+To reach a TeamSpeak 3 server, write its address with the `ts3server://` or `ts3://` scheme, such
+as `ts3server://voice.example.com`. A `port`, `password`, `channel` or `channelpassword` in the
+link is read as well. The scheme alone decides which protocol moqspeak speaks, so saved servers
+of both kinds sit side by side.
 
 | To | Do |
 |---|---|
@@ -213,10 +222,11 @@ Without them, the app is signed ad hoc, and Gatekeeper asks the user to approve 
 | `client/assets/` | The style sheets (`css/`), the themes (`themes/`) and the Lucide icons (`icons/`) |
 | `client/src/audio/` | Devices, Opus, mixing, voice processing and the interface sounds (`cue/`) |
 | `client/src/screen/` | Screen capture, AV1 encoding and decoding |
-| `client/src/engine.rs` | The network side: Worker connection, reconnects, sharing |
-| `client/src/media.rs` | Publishing and subscribing over Media over QUIC |
+| `client/src/transport/` | The transports: `moq/` for the Worker and the MoQ relay, `ts3/` for TeamSpeak 3 |
+| `client/src/engine.rs` | The network thread: reconnects, and the transport an address names |
 | `client/src/identity.rs` | The Ed25519 identity |
 | `client/src/bot.rs` | The headless test participant |
+| `ts3proto/` | The TeamSpeak 3 client protocol: handshake, transport, commands and voice |
 | `server/src/index.ts` | The Worker: servers, channels, roles and relay tokens |
 | `packaging/` | Icons, the macOS bundle script and the Linux desktop file |
 
@@ -226,6 +236,11 @@ Without them, the app is signed ad hoc, and Gatekeeper asks the user to approve 
   passwords do not exist yet.
 - Screen sharing adds roughly a third of a second of delay, from the AV1 encoder.
 - macOS builds are Apple silicon only.
+- TeamSpeak 3 support is experimental. It carries voice, channel moves, chat and pokes. It shares
+  no screens, leaves channel editing to the TeamSpeak client, and shows everyone as a plain user,
+  because TeamSpeak grants server groups in place of moqspeak's three roles. moqspeak appears on
+  a TeamSpeak server as a Windows client: a server accepts only a version string TeamSpeak has
+  signed, and that signature covers the platform with it.
 
 ## License
 

@@ -4,7 +4,6 @@ use std::rc::Rc;
 
 use zgui::prelude::*;
 
-use crate::model::Role;
 use crate::ui::parts::KeyProps;
 use crate::ui::parts::icons;
 use crate::ui::state::{AppState, Modal, Selection};
@@ -25,7 +24,7 @@ pub fn HeadKeys() -> impl IntoView {
     let unread = Signal::derive_local(move || state.chat.with(|c| !c.open && !c.unread.is_empty()));
 
     view! {
-        if move || state.my_role() >= Role::Mod {
+        if move || state.can_channels() && state.may_moderate() {
             Key(
                 svg = Signal::stored_local(icons::FOLDER_PLUS),
                 label = Signal::stored_local("New channel".to_owned()),

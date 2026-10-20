@@ -1,6 +1,6 @@
 //! How the connection is, as a status tone.
 
-use crate::engine::{ConnStatus, MediaStatus};
+use crate::transport::{ConnStatus, MediaStatus};
 
 /// The tone of the connection mark, and whether it pulses.
 pub fn connection_tone(status: &ConnStatus, media: &MediaStatus) -> (&'static str, bool) {

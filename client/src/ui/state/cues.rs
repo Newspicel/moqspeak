@@ -50,7 +50,7 @@ mod tests {
             deaf: false,
             away: false,
             away_message: String::new(),
-            broadcast: String::new(),
+            media: String::new(),
             sharing: false,
             role: Default::default(),
             connected_at: 0,

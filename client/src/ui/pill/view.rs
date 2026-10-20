@@ -56,7 +56,9 @@ pub fn Pill() -> impl IntoView {
                     TalkKey()
                 }
                 box(class = "ms-pill__sep")
-                ShareKey()
+                if move || state.offers_share() {
+                    ShareKey()
+                }
                 Key(
                     svg = Signal::stored_local(icons::SETTINGS),
                     label = label("Settings"),

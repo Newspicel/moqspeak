@@ -4,7 +4,8 @@ use std::sync::atomic::Ordering;
 
 use crate::audio::{Cue, VoiceMode};
 use crate::engine::Command;
-use crate::model::{ChannelId, ChatTarget, ClientId, ClientMsg};
+use crate::model::{ChannelId, ChatTarget, ClientId};
+use crate::transport::Action;
 use crate::ui::state::app::AppState;
 use crate::ui::state::chat::Conversation;
 use crate::ui::state::log::Tone;
@@ -59,7 +60,7 @@ impl AppState {
         if self.my_client().is_some_and(|c| c.channel == channel) {
             return;
         }
-        self.msg(ClientMsg::Join { channel });
+        self.msg(Action::Join { channel });
     }
 
     pub fn set_mic_muted(&self, muted: bool) {
@@ -67,7 +68,7 @@ impl AppState {
         self.cue(if muted { Cue::Mute } else { Cue::Unmute });
         self.engine
             .with_value(|e| e.audio.shared.mic_muted.store(muted, Ordering::Relaxed));
-        self.msg(ClientMsg::Status {
+        self.msg(Action::Status {
             muted: Some(muted),
             deaf: None,
             away: None,
@@ -80,7 +81,7 @@ impl AppState {
         self.cue(if deaf { Cue::Deafen } else { Cue::Undeafen });
         self.engine
             .with_value(|e| e.audio.shared.deafened.store(deaf, Ordering::Relaxed));
-        self.msg(ClientMsg::Status {
+        self.msg(Action::Status {
             muted: None,
             deaf: Some(deaf),
             away: None,
@@ -90,7 +91,7 @@ impl AppState {
 
     pub fn set_away(&self, away: bool) {
         self.away.set(away);
-        self.msg(ClientMsg::Status {
+        self.msg(Action::Status {
             muted: None,
             deaf: None,
             away: Some(away),
@@ -148,7 +149,7 @@ impl AppState {
         if Some(client) == self.me.get_untracked() {
             self.join(channel);
         } else if self.client(client).is_some_and(|c| c.channel != channel) {
-            self.msg(ClientMsg::Move {
+            self.msg(Action::Move {
                 id: client,
                 channel,
             });
@@ -247,6 +248,6 @@ impl AppState {
             Conversation::Channel => (ChatTarget::Channel, None),
             Conversation::Private(id) => (ChatTarget::Client, Some(id)),
         };
-        self.msg(ClientMsg::Chat { target, to, text });
+        self.msg(Action::Chat { target, to, text });
     }
 }

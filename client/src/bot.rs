@@ -11,8 +11,8 @@ use std::sync::atomic::Ordering;
 use std::time::{Duration, Instant};
 
 use crate::audio::{Audio, FRAME, Packet, RATE};
-use crate::engine::{Command, Engine, Event};
-use crate::model::ClientMsg;
+use crate::engine::{Command, Engine};
+use crate::transport::{Action, Event};
 
 pub fn run(args: &[String]) {
     let address = args
@@ -77,7 +77,7 @@ pub fn run(args: &[String]) {
         // The beeps wake this loop every two seconds, which is clock enough for a stroll.
         if wander && !rooms.is_empty() && moved.elapsed() >= Duration::from_secs(3) {
             next_room = (next_room + 1) % rooms.len();
-            engine.send(Command::Send(ClientMsg::Join {
+            engine.send(Command::Send(Action::Join {
                 channel: rooms[next_room],
             }));
             moved = Instant::now();
@@ -95,13 +95,17 @@ pub fn run(args: &[String]) {
                     engine.send(Command::StartShare(crate::screen::Source::TestPattern));
                 }
                 if !joined {
-                    if let Some(wanted) = &channel {
-                        if let Some(ch) = channels
+                    let tree: Vec<String> = channels
+                        .iter()
+                        .map(|c| format!("{}:{}", c.id, c.name))
+                        .collect();
+                    println!("[channels] {}", tree.join(", "));
+                    if let Some(wanted) = &channel
+                        && let Some(ch) = channels
                             .iter()
                             .find(|c| c.name.eq_ignore_ascii_case(wanted))
-                        {
-                            engine.send(Command::Send(ClientMsg::Join { channel: ch.id }));
-                        }
+                    {
+                        engine.send(Command::Send(Action::Join { channel: ch.id }));
                     }
                     joined = true;
                 }

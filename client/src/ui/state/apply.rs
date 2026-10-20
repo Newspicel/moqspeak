@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 use zgui::prelude::*;
 
 use crate::audio::Cue;
-use crate::engine::{ConnStatus, Event, MediaStatus};
-use crate::model::{ChatTarget, ClientMsg};
+use crate::model::ChatTarget;
+use crate::transport::{Action, ConnStatus, Event, MediaStatus};
 use crate::ui::state::app::AppState;
 use crate::ui::state::chat::{Conversation, MessageKind};
 use crate::ui::state::cues::tree_cue;
@@ -20,6 +20,7 @@ impl AppState {
     pub fn apply(&self, event: Event) {
         match event {
             Event::Status(status) => self.apply_status(status),
+            Event::Caps(caps) => self.caps.set(caps),
             Event::Welcome { you } => {
                 self.me.set(Some(you.id));
                 self.log_line(Tone::Info, format!("Connected as {}", you.name));
@@ -30,7 +31,7 @@ impl AppState {
                     self.away.get_untracked(),
                 );
                 if muted || deaf || away {
-                    self.msg(ClientMsg::Status {
+                    self.msg(Action::Status {
                         muted: Some(muted),
                         deaf: Some(deaf),
                         away: Some(away),

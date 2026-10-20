@@ -204,3 +204,45 @@
     font-size: var(--ms-menu-text);
     font-weight: var(--zui-type-weight-medium);
 }
+
+/* TeamSpeak servers group their tree with spacers: a ruled line, or a heading across the width. */
+.ms-row[data-spacer] {
+    cursor: default;
+}
+
+.ms-row[data-spacer] .ms-row__gap {
+    display: none;
+}
+
+.ms-row[data-spacer] .ms-row__name {
+    flex: 1 1 auto;
+    color: var(--zui-color-muted-foreground);
+}
+
+.ms-row[data-spacer="center"] .ms-row__name {
+    text-align: center;
+}
+
+.ms-row[data-spacer="right"] .ms-row__name {
+    text-align: right;
+}
+
+/* A ruled line divides the tree and answers to nothing. */
+.ms-row[data-spacer="fill"] {
+    height: calc(var(--ms-row) * 0.7);
+    color: var(--zui-color-border);
+}
+
+.ms-row[data-spacer="fill"] .ms-twisty {
+    display: none;
+}
+
+.ms-row[data-spacer="fill"] .ms-row__name {
+    color: var(--zui-color-border);
+    text-overflow: clip;
+}
+
+.ms-row[data-spacer="fill"]:hover,
+.ms-row[data-spacer="fill"][data-menu="open"] {
+    background-color: transparent;
+}

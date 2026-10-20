@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use crate::model::{Channel, ChannelId, Client, ClientId, Role};
+use crate::model::{Channel, ChannelId, Client, ClientId, Role, Spacer};
 
 /// What identifies a row across updates.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -25,6 +25,22 @@ pub struct ChannelRow {
     pub count: usize,
     pub has_children: bool,
     pub collapsed: bool,
+    /// Set where the row rules a line or sets a heading instead of naming a place to talk.
+    pub spacer: Option<Spacer>,
+}
+
+impl ChannelRow {
+    /// What the row shows. A ruled line repeats its label across the width.
+    pub fn label(&self) -> String {
+        /// Enough repeats to cross the widest tree, which the row then clips.
+        const WIDTH: usize = 160;
+        match self.spacer {
+            Some(Spacer::Fill) if !self.name.is_empty() => self
+                .name
+                .repeat(WIDTH / self.name.chars().count().max(1) + 1),
+            _ => self.name.clone(),
+        }
+    }
 }
 
 /// One client of the tree.
@@ -95,6 +111,7 @@ pub fn tree_rows(
                 count: inside.len(),
                 has_children,
                 collapsed,
+                spacer: ch.spacer,
             }));
             if collapsed {
                 continue;
@@ -145,6 +162,7 @@ mod tests {
             order,
             max_clients: 0,
             is_default: id == 1,
+            spacer: None,
         }
     }
 
@@ -158,7 +176,7 @@ mod tests {
             deaf: false,
             away: false,
             away_message: String::new(),
-            broadcast: String::new(),
+            media: String::new(),
             sharing: false,
             role: Default::default(),
             connected_at: 0,

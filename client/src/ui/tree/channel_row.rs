@@ -5,7 +5,7 @@ use zgui::reactive::LocalStorage;
 use zgui::vocab::SharedString;
 use zgui_ui::prelude::*;
 
-use crate::model::ChannelId;
+use crate::model::{ChannelId, Spacer};
 use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::press;
 use crate::ui::state::{AppState, ChannelRow, Selection};
@@ -19,6 +19,9 @@ pub fn ChannelLine(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
     let field = move |f: fn(&ChannelRow) -> bool| Signal::derive_local(move || row.with(f));
     let collapsed = field(|r| r.collapsed);
     let has_children = field(|r| r.has_children);
+    // A ruled line names no place to talk, so it takes no pointer and no focus.
+    let ruled = field(|r| r.spacer == Some(Spacer::Fill));
+    let plain = field(|r| r.spacer.is_none());
     let mark = Signal::derive_local(move || {
         if row.with(|r| r.is_default) {
             icons::HOUSE
@@ -32,16 +35,17 @@ pub fn ChannelLine(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
             ContextMenuTrigger {
                 row(
                     class = "ms-row ms-row--channel",
-                    attr:data-selected = move || (state.selected.get() == Selection::Channel(id)).then(|| "true".to_owned()),
+                    attr:data-spacer = move || row.with(|r| r.spacer.map(|s| s.name().to_owned())),
+                    attr:data-selected = move || (!ruled.get() && state.selected.get() == Selection::Channel(id)).then(|| "true".to_owned()),
                     attr:data-mine = move || row.with(|r| r.mine).then(|| "true".to_owned()),
                     attr:data-drop = move || (state.dragging() && state.drop_target.get() == Some(id)).then(|| "true".to_owned()),
                     style:padding-left = move || px(indent(row.with(|r| r.depth))),
-                    tabindex = Focus::Sequential,
+                    tabindex = move || if ruled.get() { Focus::Programmatic } else { Focus::Sequential },
                     a11y:role = Role::TreeItem,
                     a11y:label = move || SharedString::from(row.with(|r| r.name.clone())),
                     a11y:expanded = move || !collapsed.get(),
                     on:click = move |ev| {
-                        if ev.button == Some(PointerButton::Secondary) {
+                        if ev.button == Some(PointerButton::Secondary) || ruled.get_untracked() {
                             return;
                         }
                         if state.click(Selection::Channel(id)) {
@@ -55,7 +59,9 @@ pub fn ChannelLine(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
                         _ => {}
                     },
                     on:pointer_enter = move |_| {
-                        if state.drag.with_untracked(|d| d.as_ref().is_some_and(|d| d.active)) {
+                        if !ruled.get_untracked()
+                            && state.drag.with_untracked(|d| d.as_ref().is_some_and(|d| d.active))
+                        {
                             state.drop_target.set(Some(id));
                         }
                     },
@@ -75,8 +81,10 @@ pub fn ChannelLine(id: ChannelId, row: Signal<ChannelRow, LocalStorage>) -> impl
                     ) {
                         Icon(svg = icons::CHEVRON_RIGHT, size = IconSize::Xs)
                     }
-                    Icon(svg = mark, size = IconSize::Sm, class = "ms-row__mark")
-                    text(class = "ms-row__name") {{move || row.with(|r| r.name.clone())}}
+                    if move || plain.get() {
+                        Icon(svg = mark, size = IconSize::Sm, class = "ms-row__mark")
+                    }
+                    text(class = "ms-row__name") {{move || row.with(ChannelRow::label)}}
                     box(class = "ms-row__gap")
                     if move || row.with(|r| r.count > 0) {
                         text(
