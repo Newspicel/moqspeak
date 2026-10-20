@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["client"]
+members = ["client", "ts3proto"]
 
 [profile.dev]
 opt-level = 1
