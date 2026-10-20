@@ -9,15 +9,17 @@ use crate::ui::parts::icons::{self, IconProps, IconSize};
 use crate::ui::parts::{Erase, KeyProps, press};
 use crate::ui::settings::about::AboutPaneProps;
 use crate::ui::settings::appearance::AppearancePaneProps;
+use crate::ui::settings::identity::IdentityPaneProps;
 use crate::ui::settings::sound::SoundPaneProps;
 use crate::ui::settings::voice::VoicePaneProps;
 use crate::ui::state::AppState;
 
 /// Every section: its pane, its mark and its name.
-const SECTIONS: [(&str, &str, &str); 4] = [
+const SECTIONS: [(&str, &str, &str); 5] = [
     ("voice", icons::MIC, "Voice"),
     ("sound", icons::VOLUME_2, "Sound"),
     ("appearance", icons::PALETTE, "Appearance"),
+    ("identity", icons::SHIELD_USER, "Identity"),
     ("about", icons::INFO, "About"),
 ];
 
@@ -63,6 +65,7 @@ pub fn SettingsView() -> impl IntoView {
                 VoicePane(info = info)
                 SoundPane(info = info)
                 AppearancePane()
+                IdentityPane()
                 AboutPane()
             }
         }

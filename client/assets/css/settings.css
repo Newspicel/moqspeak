@@ -321,3 +321,55 @@
     text-overflow: ellipsis;
     text-align: left;
 }
+
+/* The identity: its id and its level read as values, in the control column. */
+.ms-identity__uid,
+.ms-identity__level {
+    width: var(--ms-settings-control);
+    font-family: var(--zui-type-family-mono);
+    font-size: var(--zui-type-size-xs);
+    color: var(--zui-color-muted-foreground);
+}
+
+/* Controls that stand together in one row of a settings item. */
+.ms-identity__row {
+    align-items: center;
+    gap: var(--zui-space-xs);
+}
+
+.ms-identity__target {
+    width: 72px;
+}
+
+/* A pasted identity is long, so the import column takes the width of the pane. */
+.ms-identity__import {
+    gap: var(--zui-space-sm);
+    padding-top: var(--zui-space-sm);
+}
+
+.ms-identity__paste {
+    width: 100%;
+    min-height: 92px;
+    font-family: var(--zui-type-family-mono);
+    font-size: var(--zui-type-size-xs);
+}
+
+/* What an identity holds, before it takes the place of the one in use. */
+.ms-identity__preview {
+    gap: var(--zui-space-xs);
+    padding: var(--zui-space-sm);
+    border-radius: var(--zui-radius-md);
+    background-color: var(--zui-color-muted);
+    font-size: var(--zui-type-size-sm);
+}
+
+.ms-identity__hint,
+.ms-identity__progress {
+    color: var(--zui-color-muted-foreground);
+    font-size: var(--zui-type-size-xs);
+}
+
+.ms-identity__trouble {
+    color: var(--zui-color-destructive);
+    font-size: var(--zui-type-size-xs);
+}

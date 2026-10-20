@@ -6,7 +6,7 @@
 //! grants server groups in place of moqspeak's roles, and carries no screens.
 
 mod commands;
-mod identity;
+pub mod identity;
 mod roster;
 mod session;
 mod spacer;

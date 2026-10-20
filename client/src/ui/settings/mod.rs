@@ -3,6 +3,7 @@
 mod about;
 mod appearance;
 mod device;
+mod identity;
 mod meter;
 mod slider;
 mod sound;
