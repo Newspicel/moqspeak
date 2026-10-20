@@ -7,6 +7,7 @@
 
 mod commands;
 pub mod identity;
+mod refusal;
 mod roster;
 mod session;
 mod spacer;

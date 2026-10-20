@@ -98,6 +98,8 @@ pub(crate) struct ClientInner {
     /// Set when error 3329 is received — signals the bg task to perform
     /// a deferred disconnect, matching JS `setImmediate(() => this.disconnect())`.
     pub(crate) pending_disconnect: bool,
+    /// Why the server refused the connection, when it answered the handshake with an error.
+    pub(crate) refusal: Option<String>,
 }
 
 impl ClientInner {
@@ -133,6 +135,7 @@ impl ClientInner {
             close_rx,
             close_tx,
             pending_disconnect: false,
+            refusal: None,
         }
     }
 
@@ -298,6 +301,17 @@ impl ClientInner {
         }
 
         let id = params.get("id").map(|s| s.as_str()).unwrap_or("0");
+        if id != "0" && self.status != ClientStatus::Connected {
+            // The server answered the handshake with an error, so no welcome follows. Dropping the
+            // wakers ends every wait, and the reason goes with them.
+            self.logger.debug(
+                &format!("the server refused the handshake: {params:?}"),
+                &[],
+            );
+            self.refusal = Some(refusal_text(params));
+            self.connected_wakers.clear();
+            self.pending_disconnect = true;
+        }
         if id == "3329" {
             // JS: `setImmediate(() => this.disconnect().catch(() => {}))`
             // Defer the disconnect to after process_packet returns and the
@@ -714,26 +728,33 @@ impl Client {
             if inner.status == ClientStatus::Connected {
                 return Ok(());
             }
+            if let Some(reason) = inner.refusal.clone() {
+                return Err(Error::Teamspeak(reason));
+            }
             let (tx, rx) = oneshot::channel();
             inner.connected_wakers.push(tx);
             rx
         };
         match signal {
             Some(sig) => {
-                let canceled = Error::Teamspeak("connection cancelled".into());
                 let aborted = Error::Teamspeak("aborted".into());
                 tokio::select! {
-                    r = &mut rx => r.map_err(|_| canceled)?,
+                    r = &mut rx => r.map_err(|_| self.gave_up())?,
                     _ = sig.wait_for_abort() => return Err(aborted),
                 }
                 Ok(())
             }
             None => {
-                rx.await
-                    .map_err(|_| Error::Teamspeak("connection cancelled".into()))?;
+                rx.await.map_err(|_| self.gave_up())?;
                 Ok(())
             }
         }
+    }
+
+    /// Why a wait for the welcome ended without one.
+    fn gave_up(&self) -> Error {
+        let reason = self.inner.lock().unwrap().refusal.clone();
+        Error::Teamspeak(reason.unwrap_or_else(|| "connection cancelled".into()))
     }
 
     // ---- Commands -------------------------------------------------------------
@@ -1002,5 +1023,79 @@ async fn resolve_addr_impl(addr: &str, resolver: &dyn AddrResolver) -> String {
             .map(|a| a.addr.clone())
             .unwrap_or(addr_with_port),
         Err(_) => addr_with_port,
+    }
+}
+
+/// The error a server answers with when the identity's security level is below the one it asks
+/// for. Its `extra_msg` is that level.
+const IDENTITY_LEVEL: &str = "519";
+
+/// What the server said about refusing the connection, as one sentence.
+fn refusal_text(params: &HashMap<String, String>) -> String {
+    let message = params.get("msg").map(String::as_str).unwrap_or("").trim();
+    let extra = params
+        .get("extra_msg")
+        .map(String::as_str)
+        .unwrap_or("")
+        .trim();
+    let id = params.get("id").map(String::as_str).unwrap_or("0");
+    if id == IDENTITY_LEVEL {
+        return match extra.parse::<i32>() {
+            Ok(level) => format!("it asks for identity security level {level}"),
+            Err(_) => "it asks for a higher identity security level".to_owned(),
+        };
+    }
+    match (message.is_empty(), extra.is_empty()) {
+        (false, false) => format!("{message} ({extra})"),
+        (false, true) => message.to_owned(),
+        (true, false) => extra.to_owned(),
+        (true, true) => format!("error {id}"),
+    }
+}
+
+#[cfg(test)]
+mod refusal_tests {
+    use super::*;
+
+    fn params(pairs: &[(&str, &str)]) -> HashMap<String, String> {
+        pairs
+            .iter()
+            .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+            .collect()
+    }
+
+    #[test]
+    fn names_the_security_level_the_server_asks_for() {
+        let said = refusal_text(&params(&[
+            ("id", "519"),
+            ("msg", "could not validate client identity"),
+            ("extra_msg", "23"),
+        ]));
+        assert_eq!(said, "it asks for identity security level 23");
+    }
+
+    #[test]
+    fn asks_for_a_higher_level_when_it_names_no_number() {
+        let said = refusal_text(&params(&[
+            ("id", "519"),
+            ("msg", "could not validate client identity"),
+        ]));
+        assert_eq!(said, "it asks for a higher identity security level");
+    }
+
+    #[test]
+    fn carries_another_refusal_as_the_server_words_it() {
+        let said = refusal_text(&params(&[
+            ("id", "3329"),
+            ("msg", "connection failed, you are banned"),
+            ("extra_msg", "for 10 minutes"),
+        ]));
+        assert_eq!(said, "connection failed, you are banned (for 10 minutes)");
+    }
+
+    #[test]
+    fn falls_back_to_the_number_the_error_carries() {
+        let said = refusal_text(&params(&[("id", "1537")]));
+        assert_eq!(said, "error 1537");
     }
 }

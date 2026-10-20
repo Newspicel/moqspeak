@@ -15,6 +15,7 @@ use crate::engine::Command;
 use crate::model::{ChatTarget, Client, ClientId, Role};
 use crate::transport::ts3::commands::{self, Me};
 use crate::transport::ts3::identity;
+use crate::transport::ts3::refusal;
 use crate::transport::ts3::roster::{Change, Roster};
 use crate::transport::ts3::version;
 use crate::transport::ts3::voice::Spurts;
@@ -51,6 +52,8 @@ impl Transport for TeamSpeak {
             .await
             .context("preparing the TeamSpeak identity")?;
 
+        let level = ts_identity.security_level();
+
         let options = ClientOptions {
             logger: Arc::new(ConsoleLogger),
             server_password: address.password.clone(),
@@ -85,7 +88,7 @@ impl Transport for TeamSpeak {
         tokio::time::timeout(HANDSHAKE_TIMEOUT, client.wait_connected(None))
             .await
             .context("the TeamSpeak handshake timed out")?
-            .context("the server refused the handshake")?;
+            .map_err(|e| anyhow!("{}", refusal::explain(&e.to_string(), level)))?;
         reached.set(true);
         let client = client;
 
