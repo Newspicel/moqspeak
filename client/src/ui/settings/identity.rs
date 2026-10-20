@@ -13,9 +13,6 @@ use crate::ui::state::{AppState, Level, Note};
 /// How often a running search reports what it reached.
 const POLL: Duration = Duration::from_millis(120);
 
-/// The highest level this asks for. Every step beyond doubles the work again.
-const MAX_LEVEL: i32 = 40;
-
 /// A count of offsets, short enough for a row.
 fn tally(tried: u64) -> String {
     match tried {
@@ -136,10 +133,6 @@ pub fn IdentityPane() -> impl IntoView {
             trouble.set(Some(format!(
                 "The identity already stands at level {have}."
             )));
-            return;
-        }
-        if want > MAX_LEVEL {
-            trouble.set(Some(format!("Level {MAX_LEVEL} is as high as this goes.")));
             return;
         }
         let started = Search::start(current, want);
