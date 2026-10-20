@@ -89,6 +89,16 @@ impl Transport for TeamSpeak {
         reached.set(true);
         let client = client;
 
+        // A client is shown its own channel and no other until it asks. Asking for them all is
+        // what makes the people in the rest of the tree visible.
+        if let Err(e) = client.exec_command("channelsubscribeall", 5_000).await {
+            out.warn(format!("TeamSpeak: only your own channel is shown ({e})"));
+        }
+
+        // Everything the server has queued by now describes what was already here: the channels,
+        // and everybody standing in them. Counting it is what tells a greeting from an arrival.
+        let mut opening = ts_events.len();
+
         // The server sends the channels and everyone in view by itself, so the roster fills from
         // the stream rather than from any request.
         let mut roster = Roster::new(address.addr.clone());
@@ -124,14 +134,15 @@ impl Transport for TeamSpeak {
                     let Some(event) = event else {
                         break Err(anyhow!("the connection ended"));
                     };
+                    // Anything still left from the opening is somebody who was already here.
+                    let arrived = opening == 0;
+                    opening = opening.saturating_sub(1);
                     match event {
                         Ts3Event::Notification { name, params } => {
                             // Read the log line before applying, while a leaving client still
                             // has a name.
                             match name.as_str() {
-                                // Everyone the server names before it has finished was already
-                                // here, so only an arrival after that is worth a line.
-                                "notifycliententerview" if roster.settled() => {
+                                "notifycliententerview" if arrived => {
                                     if let Some(id) = number(&params, "clid")
                                         && id != my_id
                                     {

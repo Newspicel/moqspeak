@@ -33,17 +33,9 @@ pub struct Roster {
     groups: HashMap<u64, String>,
     /// The standings each client holds, kept so that a group list arriving later still names them.
     held: HashMap<ClientId, Vec<u64>>,
-    /// Whether the server has finished telling us what was already there. Everyone named before
-    /// that was in the room when we walked in, not somebody arriving.
-    settled: bool,
 }
 
 impl Roster {
-    /// Whether what the server sent at the start is complete.
-    pub fn settled(&self) -> bool {
-        self.settled
-    }
-
     pub fn new(relay: String) -> Self {
         Self {
             server: ServerInfo {
@@ -57,7 +49,6 @@ impl Roster {
             rows: Vec::new(),
             groups: HashMap::new(),
             held: HashMap::new(),
-            settled: false,
         }
     }
 
@@ -200,7 +191,6 @@ impl Roster {
             }
             "channellistfinished" => {
                 self.rebuild();
-                self.settled = true;
                 Change::State
             }
             "notifychannelcreated" | "notifychanneledited" | "notifychannelmoved" => {

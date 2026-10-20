@@ -200,15 +200,14 @@ impl ClientInner {
     }
 
     /// Hands one `notify` command to the raw handlers.
+    ///
+    /// Called straight rather than spawned: these describe one state changing step by step, and a
+    /// task per step would let the runtime put an arrival after the move that followed it.
     fn emit_notification(&self, name: &str, params: &HashMap<String, String>) {
         for h in &self.event_handlers.notification {
-            let h = Arc::clone(h);
-            let event = Event::Notification {
+            h(Event::Notification {
                 name: name.to_owned(),
                 params: params.clone(),
-            };
-            tokio::spawn(async move {
-                h(event);
             });
         }
     }
