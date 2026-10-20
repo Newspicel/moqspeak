@@ -94,7 +94,7 @@ pub fn run(args: &[String]) {
                 if !joined && share {
                     engine.send(Command::StartShare(crate::screen::Source::TestPattern));
                 }
-                if !joined {
+                if !joined && !channels.is_empty() {
                     let tree: Vec<String> = channels
                         .iter()
                         .map(|c| format!("{}:{}", c.id, c.name))
