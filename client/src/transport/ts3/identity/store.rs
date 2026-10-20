@@ -47,12 +47,18 @@ pub fn write(path: &Path, identity: &ts3proto::Identity) -> Result<()> {
     }
     std::fs::write(path, identity.to_string())
         .with_context(|| format!("writing {}", path.display()))?;
+    seal(path)
+}
+
+/// Leaves `path` readable by this account alone. A file that holds a private key is kept this way.
+pub fn seal(path: &Path) -> Result<()> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
             .with_context(|| format!("sealing {}", path.display()))?;
     }
+    let _ = path;
     Ok(())
 }
 

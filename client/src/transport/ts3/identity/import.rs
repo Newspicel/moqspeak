@@ -7,14 +7,9 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use base64::Engine as _;
 use base64::engine::general_purpose::{STANDARD, STANDARD_NO_PAD};
-use sha1::{Digest, Sha1};
 
-/// The first 100 bytes of the key the TeamSpeak client obfuscates an identity with. Obfuscation
-/// covers 100 bytes at most, so the rest of that key is never read.
-const OBFUSCATION_KEY: &[u8; 100] = b"b9dfaa7bee6ac57ac7b65f1094a1c155e747327bc2fe5d51c512023fe54a280201004e90ad1daaae1075d53b7d571c30e063";
-
-/// How many bytes the hash of the tail covers.
-const HASH_LEN: usize = 20;
+use super::obfuscate;
+use super::obfuscate::HASH_LEN;
 
 /// The size of a P-256 scalar, and of each coordinate of the point it gives.
 const SCALAR: usize = 32;
@@ -98,7 +93,7 @@ fn from_export(value: &str) -> Result<ts3proto::Identity> {
         data.len() > HASH_LEN,
         "the identity is too short to hold a key"
     );
-    deobfuscate(&mut data);
+    obfuscate::lift(&mut data);
     let inner = std::str::from_utf8(&data)
         .ok()
         .context("the identity does not hold a key")?;
@@ -112,19 +107,6 @@ fn from_export(value: &str) -> Result<ts3proto::Identity> {
         "the key does not match the public key beside it"
     );
     Ok(identity)
-}
-
-/// Lifts the obfuscation the TeamSpeak client puts over an exported identity.
-fn deobfuscate(data: &mut [u8]) {
-    let tail = &data[HASH_LEN..];
-    let end = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
-    let hash = Sha1::digest(&tail[..end]);
-    for (i, byte) in data.iter_mut().take(HASH_LEN).enumerate() {
-        *byte ^= hash[i];
-    }
-    for (i, byte) in data.iter_mut().take(OBFUSCATION_KEY.len()).enumerate() {
-        *byte ^= OBFUSCATION_KEY[i];
-    }
 }
 
 /// Base64 the TeamSpeak client writes with padding in one place and without it in another.
@@ -215,74 +197,22 @@ fn usable(identity: &ts3proto::Identity) -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::export;
     use super::*;
 
-    fn der_len(len: usize) -> Vec<u8> {
-        if len < 0x80 {
-            vec![len as u8]
-        } else if len < 0x100 {
-            vec![0x81, len as u8]
-        } else {
-            vec![0x82, (len >> 8) as u8, (len & 0xff) as u8]
-        }
-    }
-
-    fn der_int(value: &[u8]) -> Vec<u8> {
-        let trimmed = match value.iter().position(|&b| b != 0) {
-            Some(at) => &value[at..],
-            None => &[0][..],
-        };
-        let mut body = Vec::new();
-        if trimmed[0] & 0x80 != 0 {
-            body.push(0);
-        }
-        body.extend_from_slice(trimmed);
-        let mut der = vec![0x02];
-        der.extend_from_slice(&der_len(body.len()));
-        der.extend_from_slice(&body);
-        der
-    }
-
-    /// The key pair as the TeamSpeak client writes it before obfuscation.
-    fn keypair_der(identity: &ts3proto::Identity) -> Vec<u8> {
-        let point = identity.public_key_bytes();
-        let mut body = vec![0x03, 0x02, 0x07, 0x80];
-        body.extend_from_slice(&der_int(&[32]));
-        body.extend_from_slice(&der_int(&point[1..33]));
-        body.extend_from_slice(&der_int(&point[33..65]));
-        body.extend_from_slice(&der_int(&identity.private_key));
-        let mut der = vec![0x30];
-        der.extend_from_slice(&der_len(body.len()));
-        der.extend_from_slice(&body);
-        der
-    }
-
-    /// The inverse of what [`deobfuscate`] does, so a test can write what the client would.
-    fn obfuscate(plain: &[u8]) -> String {
-        let mut data = plain.to_vec();
-        for (i, byte) in data.iter_mut().take(OBFUSCATION_KEY.len()).enumerate() {
-            *byte ^= OBFUSCATION_KEY[i];
-        }
-        let tail = &data[HASH_LEN..];
-        let end = tail.iter().position(|&b| b == 0).unwrap_or(tail.len());
-        let hash = Sha1::digest(&tail[..end]);
-        for (i, byte) in data.iter_mut().take(HASH_LEN).enumerate() {
-            *byte ^= hash[i];
-        }
-        STANDARD.encode(data)
-    }
-
-    /// An exported file, written the way the TeamSpeak client writes one.
+    /// An exported file, written the way the TeamSpeak client writes one. `der` lets a test put a
+    /// key pair of its own in the file.
     fn export_with(der: &[u8], offset: i64, label: &str, nickname: &str) -> String {
-        let inner = STANDARD_NO_PAD.encode(der);
+        let mut data = STANDARD_NO_PAD.encode(der).into_bytes();
+        obfuscate::apply(&mut data);
         format!(
             "[Identity]\nid={label}\nidentity=\"{offset}V{}\"\nnickname={nickname}\nphonetic_nickname=\n",
-            obfuscate(inner.as_bytes())
+            STANDARD.encode(&data)
         )
     }
 
     fn export(identity: &ts3proto::Identity, label: &str, nickname: &str) -> String {
-        export_with(&keypair_der(identity), identity.offset, label, nickname)
+        export_with(&export::keypair(identity), identity.offset, label, nickname)
     }
 
     #[test]
@@ -336,7 +266,7 @@ mod tests {
     #[test]
     fn rejects_an_export_whose_key_does_not_match_its_public_key() {
         let identity = ts3proto::generate_identity(0);
-        let mut der = keypair_der(&identity);
+        let mut der = export::keypair(&identity);
         let last = der.len() - 1;
         der[last] ^= 0x01;
         assert!(parse(&export_with(&der, identity.offset, "Main", "Julian")).is_err());

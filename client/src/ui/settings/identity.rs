@@ -71,6 +71,7 @@ pub fn IdentityPane() -> impl IntoView {
     });
     let running =
         Signal::derive_local(move || progress.with(|p| p.as_ref().is_some_and(|p| p.running)));
+    let empty = Signal::derive_local(move || saved.with(Option::is_none));
 
     // A search reports what it reached, and what it found is kept once it ends.
     let tick = set_interval(POLL, move || {
@@ -148,6 +149,27 @@ pub fn IdentityPane() -> impl IntoView {
         });
     };
 
+    let send_out = move || {
+        let Some(current) = saved.with(|s| s.clone()) else {
+            return;
+        };
+        let nickname = state.settings.with_untracked(|s| s.nickname.clone());
+        match identity::to_downloads(&current, &nickname) {
+            Ok(path) => state.note(Note {
+                level: Level::Info,
+                title: "Identity exported".to_owned(),
+                detail: Some(path.display().to_string()),
+                reply: None,
+            }),
+            Err(e) => state.note(Note {
+                level: Level::Error,
+                title: "The identity did not export".to_owned(),
+                detail: Some(e.to_string()),
+                reply: None,
+            }),
+        }
+    };
+
     let read = move || {
         trouble.set(None);
         match identity::from_input(&pasted.with(|t| t.clone())) {
@@ -193,6 +215,9 @@ pub fn IdentityPane() -> impl IntoView {
                 }
                 SettingsItem(label = "Security level", description = "Proof of work over the identity. A server may ask for a minimum.") {
                     text(class = "ms-identity__level") {{move || level.get()}}
+                }
+                SettingsItem(label = "Export", description = "Write the identity to a file the TeamSpeak client imports under Identities.") {
+                    Button(variant = ButtonVariant::Outline, disabled = empty, on:click = move |_| send_out()) {"Export"}
                 }
             }
             SettingsGroup {
