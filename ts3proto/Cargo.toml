@@ -36,3 +36,6 @@ hickory-resolver = "0.26.2"
 
 # logging
 tracing = "0.1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread"] }

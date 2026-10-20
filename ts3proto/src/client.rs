@@ -172,34 +172,10 @@ impl ClientInner {
         if self.event_handlers.voice_data.is_empty() {
             return;
         }
-
-        if payload.len() < 5 {
+        let Some(voice) = parse_voice(payload, self.clid) else {
             return;
-        }
-
-        let client_id = u16::from_be_bytes([payload[2], payload[3]]) as i32;
-        if client_id == self.clid {
-            return;
-        }
-
-        let id = u16::from_be_bytes([payload[0], payload[1]]);
-        let codec = payload[4] as i32;
-        let data = payload[5..].to_vec();
-
-        let voice_data = VoiceData {
-            client_id,
-            id,
-            codec,
-            data: bytes::Bytes::from(data),
         };
-
-        for h in &self.event_handlers.voice_data {
-            let h = Arc::clone(h);
-            let vd = voice_data.clone();
-            tokio::spawn(async move {
-                h(Event::VoiceData(vd));
-            });
-        }
+        deliver_voice(&self.event_handlers.voice_data, voice);
     }
 
     /// Hands one `notify` command to the raw handlers.
@@ -490,6 +466,35 @@ impl ClientInner {
                 h();
             });
         }
+    }
+}
+
+/// One voice frame from a voice packet's payload. `None` for a payload too short to hold a
+/// header, and for our own voice the server echoes back.
+fn parse_voice(payload: &[u8], own_id: i32) -> Option<VoiceData> {
+    if payload.len() < 5 {
+        return None;
+    }
+    let client_id = u16::from_be_bytes([payload[2], payload[3]]) as i32;
+    if client_id == own_id {
+        return None;
+    }
+    Some(VoiceData {
+        client_id,
+        id: u16::from_be_bytes([payload[0], payload[1]]),
+        codec: payload[4] as i32,
+        data: bytes::Bytes::copy_from_slice(&payload[5..]),
+    })
+}
+
+/// Hands one voice frame to the raw handlers.
+///
+/// Called straight, so the handlers see the frames in the order they arrived. A task per frame
+/// lets the runtime deliver a later frame first, and the mixer then discards the frames behind
+/// it.
+fn deliver_voice(handlers: &[EventHandler], voice: VoiceData) {
+    for h in handlers {
+        h(Event::VoiceData(voice.clone()));
     }
 }
 
@@ -1097,5 +1102,61 @@ mod refusal_tests {
     fn falls_back_to_the_number_the_error_carries() {
         let said = refusal_text(&params(&[("id", "1537")]));
         assert_eq!(said, "error 1537");
+    }
+}
+
+#[cfg(test)]
+mod voice_tests {
+    use super::*;
+
+    fn frame(id: u16) -> VoiceData {
+        VoiceData {
+            client_id: 7,
+            id,
+            codec: crate::codec::OPUS_MUSIC,
+            data: bytes::Bytes::new(),
+        }
+    }
+
+    /// A handler that writes down the frame ids it sees.
+    fn recorder() -> (Vec<EventHandler>, Arc<Mutex<Vec<u16>>>) {
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let into = Arc::clone(&seen);
+        let handler: EventHandler = Arc::new(move |event: Event| {
+            if let Event::VoiceData(voice) = event {
+                into.lock().unwrap().push(voice.id);
+            }
+        });
+        (vec![handler], seen)
+    }
+
+    #[test]
+    fn reads_a_voice_frame_from_its_payload() {
+        let payload = [0x01, 0x02, 0x00, 0x09, 5, 0xaa, 0xbb];
+        let voice = parse_voice(&payload, 7).unwrap();
+        assert_eq!(voice.id, 0x0102);
+        assert_eq!(voice.client_id, 9);
+        assert_eq!(voice.codec, crate::codec::OPUS_MUSIC);
+        assert_eq!(&voice.data[..], &[0xaa, 0xbb]);
+    }
+
+    #[test]
+    fn drops_our_own_voice_and_a_short_payload() {
+        let payload = [0x01, 0x02, 0x00, 0x07, 4];
+        assert!(parse_voice(&payload, 7).is_none());
+        assert!(parse_voice(&[0x01, 0x02, 0x00], 7).is_none());
+    }
+
+    /// A music channel sends frames faster than the socket is read, so several wait together.
+    /// The mixer discards every frame behind the newest one it holds, so the order it sees them
+    /// in has to be the order they arrived in.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn hands_a_burst_of_frames_over_in_arrival_order() {
+        let (handlers, seen) = recorder();
+        for id in 0..64 {
+            deliver_voice(&handlers, frame(id));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+        assert_eq!(*seen.lock().unwrap(), (0..64).collect::<Vec<u16>>());
     }
 }
