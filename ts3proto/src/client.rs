@@ -234,9 +234,15 @@ impl ClientInner {
             None => return,
         };
 
-        // `initserver` is not a notification, but it carries the server's name and welcome
-        // message, which nothing else reports.
-        if cmd.name.starts_with("notify") || cmd.name == "initserver" {
+        // A server volunteers more than its notifications: `initserver` carries the server's name
+        // and welcome message, and the channel list arrives as `channellist` in as many parts as
+        // it takes. Report all of them, because nothing else does.
+        if cmd.name.starts_with("notify")
+            || matches!(
+                cmd.name.as_str(),
+                "initserver" | "channellist" | "channellistfinished"
+            )
+        {
             self.emit_notification(&cmd.name, &cmd.params);
         }
         if cmd.name.starts_with("notify") {

@@ -92,6 +92,10 @@ pub fn ClientLine(id: ClientId, row: Signal<ClientRow, LocalStorage>) -> impl In
                     if move || row.with(|r| r.role == Rank::Mod) {
                         Tag(text = "mod")
                     }
+                    // A server that names its own standings carries the name itself.
+                    if move || row.with(|r| !r.rank.is_empty()) {
+                        text(class = "ms-tag") {{move || row.with(|r| r.rank.clone())}}
+                    }
                     LiveTag(row = row)
                     box(class = "ms-row__gap")
                     row(class = "ms-row__flags") {

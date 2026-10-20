@@ -53,6 +53,7 @@ mod tests {
             media: String::new(),
             sharing: false,
             role: Default::default(),
+            rank: String::new(),
             connected_at: 0,
             platform: String::new(),
             version: String::new(),

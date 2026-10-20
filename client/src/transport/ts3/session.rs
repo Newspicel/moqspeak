@@ -25,9 +25,6 @@ use crate::transport::{
 /// How long to wait for the handshake, which includes the server's proof of work puzzle.
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(20);
 
-/// How often to read both lists again, in case a notification went missing.
-const RESYNC: Duration = Duration::from_secs(60);
-
 /// A TeamSpeak 3 server.
 pub struct TeamSpeak;
 
@@ -92,15 +89,9 @@ impl Transport for TeamSpeak {
         reached.set(true);
         let client = client;
 
+        // The server sends the channels and everyone in view by itself, so the roster fills from
+        // the stream rather than from any request.
         let mut roster = Roster::new(address.addr.clone());
-        // A server that refuses a list has not broken the connection. Say so, carry on with what
-        // the notifications bring, and read the lists again at the next resync.
-        if let Err(e) = roster.fetch_channels(&client).await {
-            out.warn(format!("TeamSpeak: could not read the channel list ({e})"));
-        }
-        if let Err(e) = roster.fetch_clients(&client).await {
-            out.warn(format!("TeamSpeak: could not read the client list ({e})"));
-        }
 
         let my_id = client.client_id() as ClientId;
         let mut me = Me {
@@ -118,8 +109,6 @@ impl Transport for TeamSpeak {
         out.emit(Event::Status(ConnStatus::Connected));
         out.emit(Event::Welcome { you });
 
-        // Everybody the list already named is in view, so their entry is not an arrival.
-        let mut known: BTreeSet<ClientId> = roster.clients.iter().map(|c| c.id).collect();
         let mut peers = None;
         publish(&roster, &me, &out, address, &mut peers);
 
@@ -128,8 +117,6 @@ impl Transport for TeamSpeak {
         let mut heard: BTreeSet<ClientId> = BTreeSet::new();
         let mut transmitting = false;
         let mut tick = tokio::time::interval(Duration::from_millis(60));
-        let mut resync = tokio::time::interval(RESYNC);
-        resync.reset();
 
         let result = loop {
             tokio::select! {
@@ -142,10 +129,11 @@ impl Transport for TeamSpeak {
                             // Read the log line before applying, while a leaving client still
                             // has a name.
                             match name.as_str() {
-                                "notifycliententerview" => {
+                                // Everyone the server names before it has finished was already
+                                // here, so only an arrival after that is worth a line.
+                                "notifycliententerview" if roster.settled() => {
                                     if let Some(id) = number(&params, "clid")
                                         && id != my_id
-                                        && !known.remove(&id)
                                     {
                                         out.log(format!("{} connected", nickname_of(&params)));
                                     }
@@ -158,7 +146,6 @@ impl Transport for TeamSpeak {
                                         audio.mixer.remove(id);
                                         spurts.forget(id);
                                         heard.remove(&id);
-                                        known.remove(&id);
                                     }
                                 }
                                 _ => {}
@@ -169,12 +156,6 @@ impl Transport for TeamSpeak {
                                     if let Some(mine) = roster.client(my_id) {
                                         me.channel = mine.channel;
                                         me.name = mine.name.clone();
-                                    }
-                                    publish(&roster, &me, &out, address, &mut peers);
-                                }
-                                Change::Channels => {
-                                    if let Err(e) = roster.fetch_channels(&client).await {
-                                        out.warn(format!("TeamSpeak: could not read the channel list ({e:#})"));
                                     }
                                     publish(&roster, &me, &out, address, &mut peers);
                                 }
@@ -273,23 +254,6 @@ impl Transport for TeamSpeak {
                         out.emit(Event::Talking(now));
                     }
                 }
-                _ = resync.tick() => {
-                    // A list the server refused earlier is worth asking for again.
-                    if roster.channels.is_empty()
-                        && let Err(e) = roster.fetch_channels(&client).await
-                    {
-                        tracing::warn!("resyncing the channel list: {e:#}");
-                    }
-                    if let Err(e) = roster.fetch_clients(&client).await {
-                        tracing::warn!("resyncing the client list: {e:#}");
-                    } else {
-                        if let Some(mine) = roster.client(my_id) {
-                            me.channel = mine.channel;
-                            me.name = mine.name.clone();
-                        }
-                        publish(&roster, &me, &out, address, &mut peers);
-                    }
-                }
             }
         };
 
@@ -352,6 +316,7 @@ fn placeholder(me: &Me) -> Client {
         media: String::new(),
         sharing: false,
         role: Role::User,
+        rank: String::new(),
         connected_at: 0,
         platform: String::new(),
         version: String::new(),

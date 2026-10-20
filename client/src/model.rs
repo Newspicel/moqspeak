@@ -71,6 +71,10 @@ pub struct Client {
     pub sharing: bool,
     #[serde(default)]
     pub role: Role,
+    /// What the server calls this client's standing, where it names one of its own instead of
+    /// granting a [`Role`]. Empty where [`Role`] says it all.
+    #[serde(default)]
+    pub rank: String,
     #[serde(default)]
     pub connected_at: u64,
     #[serde(default)]

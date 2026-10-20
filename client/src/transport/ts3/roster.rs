@@ -1,9 +1,10 @@
-//! The channels and clients of a TeamSpeak server. The lists arrive once when the session opens,
-//! and the server's notifications keep them current after that.
+//! The channels and clients of a TeamSpeak server. A server volunteers all of it when a session
+//! opens — the channel list in as many parts as it takes, then every client in view — and keeps it
+//! current with notifications. Nothing here asks the server for a list: the commands that would
+//! are the ones a server query sends, and a client is refused them.
 
 use std::collections::HashMap;
 
-use anyhow::Result;
 use ts3proto::unescape;
 
 use crate::model::{Channel, ChannelId, Client, ClientId, Role, ServerInfo};
@@ -19,8 +20,6 @@ pub enum Change {
     Quiet,
     /// The lists changed and the interface should see them.
     State,
-    /// The channel list is stale and needs fetching again.
-    Channels,
 }
 
 /// Everything the interface shows about one TeamSpeak server.
@@ -28,9 +27,23 @@ pub struct Roster {
     pub server: ServerInfo,
     pub channels: Vec<Channel>,
     pub clients: Vec<Client>,
+    /// The channel rows as the server last described them, in the order it sent them.
+    rows: Vec<HashMap<String, String>>,
+    /// What the server calls each standing it grants, by its id.
+    groups: HashMap<u64, String>,
+    /// The standings each client holds, kept so that a group list arriving later still names them.
+    held: HashMap<ClientId, Vec<u64>>,
+    /// Whether the server has finished telling us what was already there. Everyone named before
+    /// that was in the room when we walked in, not somebody arriving.
+    settled: bool,
 }
 
 impl Roster {
+    /// Whether what the server sent at the start is complete.
+    pub fn settled(&self) -> bool {
+        self.settled
+    }
+
     pub fn new(relay: String) -> Self {
         Self {
             server: ServerInfo {
@@ -41,28 +54,63 @@ impl Roster {
             },
             channels: Vec::new(),
             clients: Vec::new(),
+            rows: Vec::new(),
+            groups: HashMap::new(),
+            held: HashMap::new(),
+            settled: false,
         }
     }
 
-    /// Reads the channel list from the server.
-    pub async fn fetch_channels(&mut self, client: &ts3proto::Client) -> Result<()> {
-        let rows = client
-            .exec_command_with_response("channellist -topic -flags -limits", 5_000)
-            .await?;
-        self.channels = channels_from(&rows);
-        Ok(())
+    /// Reads the channels out of the rows the server sent.
+    fn rebuild(&mut self) {
+        self.channels = channels_from(&self.rows);
     }
 
-    /// Reads the client list from the server.
-    pub async fn fetch_clients(&mut self, client: &ts3proto::Client) -> Result<()> {
-        let rows = client
-            .exec_command_with_response("clientlist -uid -away -voice -groups", 5_000)
-            .await?;
-        self.clients = newest(&rows, "clid")
-            .into_iter()
-            .filter_map(client_from)
-            .collect();
-        Ok(())
+    /// Takes one channel row, replacing what was known of that channel field by field.
+    fn remember_channel(&mut self, params: &HashMap<String, String>) {
+        let Some(id) = number::<ChannelId>(params, "cid") else {
+            return;
+        };
+        match self
+            .rows
+            .iter_mut()
+            .find(|row| number::<ChannelId>(row, "cid") == Some(id))
+        {
+            Some(row) => row.extend(params.iter().map(|(k, v)| (k.clone(), v.clone()))),
+            None => self.rows.push(params.clone()),
+        }
+    }
+
+    /// Names the standing of every client from the groups the server granted it.
+    fn rank_everyone(&mut self) {
+        for client in &mut self.clients {
+            client.rank = self
+                .held
+                .get(&client.id)
+                .and_then(|ids| ids.iter().find_map(|id| self.groups.get(id)))
+                .cloned()
+                .unwrap_or_default();
+        }
+    }
+
+    /// Keeps the standings a client row names, and gives the client its name for them.
+    fn rank_one(&mut self, id: ClientId, params: &HashMap<String, String>) {
+        if let Some(ids) = params.get("client_servergroups") {
+            let ids: Vec<u64> = ids
+                .split(',')
+                .filter_map(|i| i.trim().parse().ok())
+                .collect();
+            self.held.insert(id, ids);
+        }
+        let rank = self
+            .held
+            .get(&id)
+            .and_then(|ids| ids.iter().find_map(|i| self.groups.get(i)))
+            .cloned()
+            .unwrap_or_default();
+        if let Some(client) = self.clients.iter_mut().find(|c| c.id == id) {
+            client.rank = rank;
+        }
     }
 
     /// The client with this id.
@@ -102,6 +150,7 @@ impl Roster {
                         self.clients.push(entering);
                     }
                 }
+                self.rank_one(id, params);
                 Change::State
             }
             "notifyclientleftview" => {
@@ -135,18 +184,47 @@ impl Roster {
                 let Some(id) = number::<ClientId>(params, "clid") else {
                     return Change::Quiet;
                 };
-                match self.clients.iter_mut().find(|c| c.id == id) {
-                    Some(client) => {
-                        update(client, params);
-                        Change::State
-                    }
-                    None => Change::Quiet,
+                if !self.clients.iter().any(|c| c.id == id) {
+                    return Change::Quiet;
                 }
+                if let Some(client) = self.clients.iter_mut().find(|c| c.id == id) {
+                    update(client, params);
+                }
+                self.rank_one(id, params);
+                Change::State
             }
-            "notifychannelcreated"
-            | "notifychanneldeleted"
-            | "notifychanneledited"
-            | "notifychannelmoved" => Change::Channels,
+            // The channel list arrives in parts and is only whole at the end of it.
+            "channellist" => {
+                self.remember_channel(params);
+                Change::Quiet
+            }
+            "channellistfinished" => {
+                self.rebuild();
+                self.settled = true;
+                Change::State
+            }
+            "notifychannelcreated" | "notifychanneledited" | "notifychannelmoved" => {
+                self.remember_channel(params);
+                self.rebuild();
+                Change::State
+            }
+            "notifychanneldeleted" => {
+                let Some(id) = number::<ChannelId>(params, "cid") else {
+                    return Change::Quiet;
+                };
+                self.rows
+                    .retain(|row| number::<ChannelId>(row, "cid") != Some(id));
+                self.rebuild();
+                Change::State
+            }
+            "notifyservergrouplist" => {
+                let Some(id) = number::<u64>(params, "sgid") else {
+                    return Change::Quiet;
+                };
+                self.groups.insert(id, text(params, "name"));
+                self.rank_everyone();
+                Change::State
+            }
             _ => Change::Quiet,
         }
     }
@@ -159,7 +237,7 @@ fn channels_from(rows: &[HashMap<String, String>]) -> Vec<Channel> {
     rows.iter()
         .filter_map(|row| {
             let id: ChannelId = number(row, "cid")?;
-            let parent = number::<ChannelId>(row, "pid").filter(|p| *p != 0);
+            let parent = parent_of(row).filter(|p| *p != 0);
             let (spacer, name) = spacer::split(&text(row, "channel_name"));
             Some(Channel {
                 id,
@@ -176,6 +254,11 @@ fn channels_from(rows: &[HashMap<String, String>]) -> Vec<Channel> {
         .collect()
 }
 
+/// The channel a row hangs under. A list the server pushes names it `cpid`.
+fn parent_of(row: &HashMap<String, String>) -> Option<ChannelId> {
+    number::<ChannelId>(row, "cpid").or_else(|| number::<ChannelId>(row, "pid"))
+}
+
 /// TeamSpeak orders channels by naming the one before each of them. This turns that chain into an
 /// index per parent, which is what the tree sorts on.
 fn sibling_order(rows: &[&HashMap<String, String>]) -> HashMap<ChannelId, i64> {
@@ -185,7 +268,7 @@ fn sibling_order(rows: &[&HashMap<String, String>]) -> HashMap<ChannelId, i64> {
         let Some(id) = number::<ChannelId>(row, "cid") else {
             continue;
         };
-        let parent = number::<ChannelId>(row, "pid").unwrap_or(0);
+        let parent = parent_of(row).unwrap_or(0);
         let previous = number::<ChannelId>(row, "channel_order").unwrap_or(0);
         after.entry(parent).or_default().insert(previous, id);
         parents.insert(id, parent);
@@ -256,8 +339,10 @@ fn client_from(row: &HashMap<String, String>) -> Option<Client> {
         // TeamSpeak carries voice on the session itself, so there is no path to publish at.
         media: String::new(),
         sharing: false,
-        // TeamSpeak grants server groups, which do not map onto these three roles.
+        // TeamSpeak grants server groups, which do not map onto these three roles. The group
+        // the server names for this client becomes its rank instead.
         role: Role::User,
+        rank: String::new(),
         connected_at: 0,
         platform: String::new(),
         version: String::new(),
@@ -517,12 +602,119 @@ mod tests {
         assert_eq!(roster.server.relay, "example:9987");
     }
 
+    /// The server sends its channels in as many parts as it likes, and the list is only whole
+    /// when it says so.
     #[test]
-    fn a_channel_notification_asks_for_the_list_again() {
+    fn the_channel_list_arrives_in_parts() {
         let mut roster = Roster::new("example:9987".into());
+        for (cid, name) in [("1", "First"), ("2", "Second")] {
+            let change = roster.apply(
+                "channellist",
+                &row(&[
+                    ("cid", cid),
+                    ("cpid", "0"),
+                    ("channel_order", "0"),
+                    ("channel_name", name),
+                ]),
+            );
+            // Nothing to show until the list is whole.
+            assert_eq!(change, Change::Quiet);
+            assert!(roster.channels.is_empty());
+        }
         assert_eq!(
-            roster.apply("notifychanneledited", &row(&[("cid", "1")])),
-            Change::Channels
+            roster.apply("channellistfinished", &row(&[])),
+            Change::State
         );
+        assert_eq!(roster.channels.len(), 2);
+    }
+
+    #[test]
+    fn a_pushed_row_names_its_parent_cpid() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "channellist",
+            &row(&[("cid", "1"), ("cpid", "0"), ("channel_name", "Top")]),
+        );
+        roster.apply(
+            "channellist",
+            &row(&[("cid", "2"), ("cpid", "1"), ("channel_name", "Under")]),
+        );
+        roster.apply("channellistfinished", &row(&[]));
+        let under = roster.channels.iter().find(|c| c.id == 2).unwrap();
+        assert_eq!(under.parent, Some(1));
+    }
+
+    #[test]
+    fn an_edited_channel_keeps_the_fields_the_notice_leaves_out() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "channellist",
+            &row(&[("cid", "1"), ("cpid", "0"), ("channel_name", "Before")]),
+        );
+        roster.apply("channellistfinished", &row(&[]));
+        roster.apply(
+            "notifychanneledited",
+            &row(&[("cid", "1"), ("channel_name", "After")]),
+        );
+        assert_eq!(roster.channels[0].name, "After");
+        assert_eq!(roster.channels[0].parent, None);
+    }
+
+    #[test]
+    fn a_deleted_channel_goes() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "channellist",
+            &row(&[("cid", "1"), ("channel_name", "Gone")]),
+        );
+        roster.apply("channellistfinished", &row(&[]));
+        assert_eq!(roster.channels.len(), 1);
+        roster.apply("notifychanneldeleted", &row(&[("cid", "1")]));
+        assert!(roster.channels.is_empty());
+    }
+
+    #[test]
+    fn a_client_wears_the_name_of_the_group_it_holds() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "notifyservergrouplist",
+            &row(&[("sgid", "9"), ("name", "Technik")]),
+        );
+        roster.apply(
+            "notifycliententerview",
+            &row(&[
+                ("clid", "7"),
+                ("ctid", "1"),
+                ("client_nickname", "Ada"),
+                ("client_servergroups", "9"),
+            ]),
+        );
+        assert_eq!(roster.client(7).unwrap().rank, "Technik");
+    }
+
+    /// A server names its groups after it has named the clients in them.
+    #[test]
+    fn a_group_list_that_arrives_late_still_names_everyone() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "notifycliententerview",
+            &row(&[("clid", "7"), ("ctid", "1"), ("client_servergroups", "3,9")]),
+        );
+        assert_eq!(roster.client(7).unwrap().rank, "");
+        roster.apply(
+            "notifyservergrouplist",
+            &row(&[("sgid", "3"), ("name", "Server\\sAdmin")]),
+        );
+        assert_eq!(roster.client(7).unwrap().rank, "Server Admin");
+    }
+
+    #[test]
+    fn a_client_in_no_named_group_wears_nothing() {
+        let mut roster = Roster::new("example:9987".into());
+        roster.apply(
+            "notifycliententerview",
+            &row(&[("clid", "7"), ("ctid", "1"), ("client_servergroups", "404")]),
+        );
+        assert_eq!(roster.client(7).unwrap().rank, "");
     }
 }

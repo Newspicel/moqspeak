@@ -57,6 +57,8 @@ pub struct ClientRow {
     #[cfg(feature = "screen-share")]
     pub sharing: bool,
     pub role: Role,
+    /// What the server calls this client's standing, where it names one of its own.
+    pub rank: String,
 }
 
 /// One row of the tree.
@@ -128,6 +130,7 @@ pub fn tree_rows(
                     #[cfg(feature = "screen-share")]
                     sharing: c.sharing,
                     role: c.role,
+                    rank: c.rank.clone(),
                 }));
             }
             walk(cx, Some(ch.id), depth + 1, rows);
@@ -179,6 +182,7 @@ mod tests {
             media: String::new(),
             sharing: false,
             role: Default::default(),
+            rank: String::new(),
             connected_at: 0,
             platform: String::new(),
             version: String::new(),
