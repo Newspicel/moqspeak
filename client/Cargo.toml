@@ -43,7 +43,7 @@ getrandom = "0.3"
 image = { version = "0.25", default-features = false, features = ["png"] }
 zgui-ui-primitives = { git = "https://github.com/zortax/zgui", rev = "f6badfb1af02b08ed1924687237028fb98a97bd8", version = "0.1.0" }
 ts3proto = { version = "0.1.0", path = "../ts3proto" }
-sha1 = "0.10"
+sha1 = "0.11"
 p256 = "0.13"
 
 [target.'cfg(windows)'.build-dependencies]

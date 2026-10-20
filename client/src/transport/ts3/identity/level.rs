@@ -1,8 +1,8 @@
 //! Raising the security level. The level is the count of leading zero bits in the hash of the
-//! public key and an offset, so a higher level is a search for a better offset. The search runs on
-//! its own threads and reports what it has reached.
+//! public key and an offset, so a higher level is a search for a better offset. Each thread holds
+//! a hasher that already covers the public key, and hashes the offset alone onto it. The search
+//! runs on its own threads and reports what it has reached.
 
-use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -10,6 +10,9 @@ use sha1::{Digest, Sha1};
 
 /// How many offsets a thread tries before it reports them.
 const FLUSH: u64 = 4096;
+
+/// How many characters the decimal form of an offset takes at most.
+const DIGITS: usize = 20;
 
 /// What a running search has reached.
 #[derive(Clone, Copy, Debug)]
@@ -101,18 +104,51 @@ impl Drop for Search {
     }
 }
 
+/// A hasher that already holds the public key, so a try hashes the offset alone.
+fn primed(prefix: &str) -> Sha1 {
+    let mut hasher = Sha1::new();
+    hasher.update(prefix.as_bytes());
+    hasher
+}
+
+/// The level the key reaches at `offset`.
+fn level_at(primed: &Sha1, offset: i64) -> i32 {
+    let mut buf = [0u8; DIGITS];
+    let len = decimal(&mut buf, offset);
+    let mut hasher = primed.clone();
+    hasher.update(&buf[..len]);
+    leading_zero_bits(&hasher.finalize())
+}
+
+/// The decimal form of `offset`, written into `buf`. Gives back how many characters it wrote.
+fn decimal(buf: &mut [u8; DIGITS], offset: i64) -> usize {
+    let mut rest = offset.unsigned_abs();
+    let mut at = DIGITS;
+    loop {
+        at -= 1;
+        buf[at] = b'0' + (rest % 10) as u8;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    if offset < 0 {
+        at -= 1;
+        buf[at] = b'-';
+    }
+    buf.copy_within(at.., 0);
+    DIGITS - at
+}
+
 /// Tries every `stride`-th offset from `first` until one reaches `target`. `from` is the level the
 /// identity already has, so only a better one is reported.
 fn hunt(prefix: &str, shared: &Shared, first: i64, stride: i64, target: i32, from: i32) {
+    let hasher = primed(prefix);
     let mut offset = first;
     let mut tried = 0u64;
     let mut seen = from;
-    let mut text = String::with_capacity(prefix.len() + 24);
     while !shared.stop.load(Ordering::Relaxed) {
-        text.clear();
-        text.push_str(prefix);
-        let _ = write!(text, "{offset}");
-        let level = leading_zero_bits(&Sha1::digest(text.as_bytes()));
+        let level = level_at(&hasher, offset);
         if level > seen {
             let mut best = shared.best.lock().expect("the best offset");
             if level > best.0 {
@@ -162,6 +198,33 @@ mod tests {
                 return progress;
             }
             std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    #[test]
+    fn writes_the_digits_of_an_offset() {
+        for offset in [0i64, 7, 10, 99, 1_000_000, i64::MAX, -1, -42, i64::MIN] {
+            let mut buf = [0u8; DIGITS];
+            let len = decimal(&mut buf, offset);
+            assert_eq!(
+                std::str::from_utf8(&buf[..len]).expect("the digits are text"),
+                offset.to_string()
+            );
+        }
+    }
+
+    #[test]
+    fn reads_the_level_the_identity_reports() {
+        let identity = ts3proto::generate_identity(0);
+        let hasher = primed(identity.public_key_base64());
+        for offset in 0..200i64 {
+            let mut at = identity.clone();
+            at.offset = offset;
+            assert_eq!(
+                level_at(&hasher, offset),
+                at.security_level(),
+                "the level at offset {offset}"
+            );
         }
     }
 

@@ -3880,7 +3880,7 @@ dependencies = [
  "screencapturekit",
  "serde",
  "serde_json",
- "sha1 0.10.7",
+ "sha1 0.11.0",
  "sonora",
  "tokio",
  "tokio-tungstenite 0.30.0",
