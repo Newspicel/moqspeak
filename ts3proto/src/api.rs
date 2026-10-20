@@ -73,6 +73,10 @@ pub async fn get_client_info(client: &Client, clid: i32) -> Result<HashMap<Strin
 }
 
 /// List all channels on the server.
+///
+/// A server query may ask this; a client is answered `insufficient client permissions`. A client
+/// is sent the list unasked when its session opens, as `channellist` in as many parts as it takes,
+/// ending in `channellistfinished`. Read those instead.
 pub async fn list_channels(client: &Client) -> Result<Vec<ChannelInfo>, Error> {
     let data = client
         .exec_command_with_response("channellist", QUERY_TIMEOUT_MS)
@@ -93,6 +97,9 @@ pub async fn list_channels(client: &Client) -> Result<Vec<ChannelInfo>, Error> {
 }
 
 /// List all clients currently connected to the server.
+///
+/// A server query may ask this; a client is answered `insufficient client permissions`. A client
+/// is told of everyone in view unasked, as `notifycliententerview`. Read those instead.
 pub async fn list_clients(client: &Client) -> Result<Vec<ClientInfo>, Error> {
     let data = client
         .exec_command_with_response("clientlist -uid -away -voice -groups", QUERY_TIMEOUT_MS)
