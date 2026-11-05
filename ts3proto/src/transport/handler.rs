@@ -20,7 +20,9 @@ use super::quicklz::Qlz;
 const MAX_OUT_PACKET_SIZE: usize = 500;
 const RECEIVE_PACKET_WINDOW_SIZE: u32 = 1024;
 const PING_INTERVAL_MS: u64 = 5000;
-const PACKET_TIMEOUT_MS: u64 = 60000;
+/// How long the server may stay silent, or leave a command unacknowledged, before the connection
+/// counts as lost. The server pings every second.
+const PACKET_TIMEOUT_MS: u64 = 10_000;
 const MAX_RETRY_INTERVAL_MS: u64 = 1000;
 const HEADER_SIZE: usize = 5;
 const TAG_SIZE: usize = 8;
@@ -1116,6 +1118,41 @@ mod tests {
         }
         assert_eq!(resolve_generation(&c, 0, PacketType::Voice as u8), 1);
         assert_eq!(resolve_generation(&c, 0, PacketType::VoiceWhisper as u8), 0);
+    }
+
+    /// Whether `check_resends_sync` closes the connection `after` the last packet arrived.
+    fn closes_after(after: Duration, unacked: bool) -> bool {
+        let mut c = core();
+        if unacked {
+            c.build_and_track_packet(PacketType::Command, b"clientupdate".to_vec(), 0, false);
+        }
+        let start = Instant::now();
+        c.last_message_received = start;
+        let closed = Arc::new(Mutex::new(false));
+        let flag = Arc::clone(&closed);
+        let on_close: Arc<Mutex<Option<OnClose>>> =
+            Arc::new(Mutex::new(Some(Box::new(move |_| {
+                *flag.lock().unwrap() = true
+            }))));
+        if unacked {
+            // The server keeps talking, and never acknowledges the command.
+            c.last_message_received = start + after;
+        }
+        check_resends_sync(&mut c, start + after, &on_close);
+        *closed.lock().unwrap()
+    }
+
+    /// The server pings every second, so ten seconds of silence is a lost connection.
+    #[test]
+    fn a_silent_server_ends_the_connection_within_ten_seconds() {
+        assert!(!closes_after(Duration::from_secs(9), false));
+        assert!(closes_after(Duration::from_millis(10_100), false));
+    }
+
+    #[test]
+    fn a_command_the_server_never_acknowledges_ends_the_connection_within_ten_seconds() {
+        assert!(!closes_after(Duration::from_secs(9), true));
+        assert!(closes_after(Duration::from_millis(10_100), true));
     }
 
     #[test]
