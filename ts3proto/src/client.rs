@@ -304,7 +304,14 @@ impl ClientInner {
     ) {
         match result {
             NotificationResult::ClientEnter { info } => {
-                if info.id != 0 && is_auto_nickname_match(&self.nickname, &info.nickname) {
+                // `initserver` names our id. The nickname identifies us only while that id is
+                // unknown, because other clients can carry our nickname with a number after it.
+                let ours = if self.clid != 0 {
+                    info.id == self.clid
+                } else {
+                    info.id != 0 && is_auto_nickname_match(&self.nickname, &info.nickname)
+                };
+                if ours {
                     self.clid = info.id;
                     sender.set_client_id(info.id);
                     self.cmd_track.signal_welcome_complete();
@@ -1158,5 +1165,59 @@ mod voice_tests {
         }
         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
         assert_eq!(*seen.lock().unwrap(), (0..64).collect::<Vec<u16>>());
+    }
+}
+
+#[cfg(test)]
+mod own_id_tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn another_client_named_like_us_leaves_our_id_alone() {
+        let client = Client::new(
+            crate::crypto::generate_identity(0),
+            "127.0.0.1".into(),
+            "Julian".into(),
+            ClientOptions::default(),
+        );
+        let sender = client.handler.lock().unwrap().create_packet_sender();
+        let mut inner = client.inner.lock().unwrap();
+        inner.handle_command_str("initserver virtualserver_name=x aclid=5", &sender);
+        assert_eq!(inner.clid, 5);
+        inner.handle_command_str(
+            "notifycliententerview cfid=0 ctid=1 reasonid=0 clid=9 client_nickname=Julian client_type=0",
+            &sender,
+        );
+        assert_eq!(inner.clid, 5, "another Julian took our client id");
+        inner.handle_command_str(
+            "notifycliententerview cfid=0 ctid=1 reasonid=0 clid=10 client_nickname=Julian1 client_type=0",
+            &sender,
+        );
+        assert_eq!(inner.clid, 5, "a Julian1 took our client id");
+    }
+
+    #[tokio::test]
+    async fn our_own_arrival_still_ends_the_welcome() {
+        let client = Client::new(
+            crate::crypto::generate_identity(0),
+            "127.0.0.1".into(),
+            "Julian".into(),
+            ClientOptions::default(),
+        );
+        let sender = client.handler.lock().unwrap().create_packet_sender();
+        let mut inner = client.inner.lock().unwrap();
+        inner.handle_command_str("initserver virtualserver_name=x aclid=5", &sender);
+        inner.handle_command_str(
+            "notifycliententerview cfid=0 ctid=1 reasonid=0 clid=5 client_nickname=Julian1 client_type=0",
+            &sender,
+        );
+        assert_eq!(inner.clid, 5);
+        let (rc, mut rx) = inner.cmd_track.register();
+        inner
+            .cmd_track
+            .buffer(HashMap::from([("k".to_owned(), "v".to_owned())]));
+        inner.cmd_track.resolve(rc, None);
+        let rows = rx.try_recv().unwrap().data;
+        assert_eq!(rows.len(), 1, "the welcome never ended");
     }
 }
