@@ -45,6 +45,7 @@ pub struct Settings {
     /// The theme name, as `Variant::name` writes it.
     pub theme: String,
     pub noise_suppression: bool,
+    pub auto_gain: bool,
     pub smart_vad: bool,
     pub echo_cancellation: bool,
     /// How wide the chat column stands open, in CSS pixels.
@@ -76,6 +77,7 @@ impl Default for Settings {
             theme_mode: Scheme::Dark.name().into(),
             theme: Variant::default().name().into(),
             noise_suppression: true,
+            auto_gain: true,
             smart_vad: true,
             echo_cancellation: true,
             chat_width: CHAT_WIDTH,

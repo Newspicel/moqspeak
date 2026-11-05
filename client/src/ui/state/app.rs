@@ -84,6 +84,7 @@ impl AppState {
         audio
             .noise_suppression
             .store(settings.noise_suppression, Ordering::Relaxed);
+        audio.auto_gain.store(settings.auto_gain, Ordering::Relaxed);
         audio.smart_vad.store(settings.smart_vad, Ordering::Relaxed);
         audio
             .echo_cancellation

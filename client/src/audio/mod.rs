@@ -80,6 +80,8 @@ pub struct AudioShared {
     pub transmitting: AtomicBool,
     /// Whether RNNoise cleans the microphone before encoding.
     pub noise_suppression: AtomicBool,
+    /// Whether AGC2 brings the voice to a steady level.
+    pub auto_gain: AtomicBool,
     /// Whether the neural detector decides what is speech.
     pub smart_vad: AtomicBool,
     /// Whether AEC3 removes the speakers from the microphone.
@@ -103,6 +105,7 @@ impl AudioShared {
             level_db: AtomicF32::new(-100.0),
             transmitting: AtomicBool::new(false),
             noise_suppression: AtomicBool::new(true),
+            auto_gain: AtomicBool::new(true),
             smart_vad: AtomicBool::new(true),
             echo_cancellation: AtomicBool::new(true),
             voice_prob: AtomicF32::new(0.0),
@@ -386,6 +389,7 @@ fn encoder_loop(
     const HANGOVER_FRAMES: u32 = 20; // 400 ms
     let mut smoothed = -100.0f32;
     let mut cleaner = processing::Cleaner::new();
+    let mut gain = processing::GainControl::new();
     let mut echo = processing::EchoCanceller::new();
     let mut played = Vec::with_capacity(FRAME * 4);
     let mut detector = processing::SpeechDetector::new();
@@ -402,6 +406,9 @@ fn encoder_loop(
             }
             if shared.noise_suppression.load(Ordering::Relaxed) {
                 cleaner.process(&mut frame);
+            }
+            if shared.auto_gain.load(Ordering::Relaxed) {
+                gain.process(&mut frame);
             }
             let speech = detector.push(&frame);
             shared.voice_prob.set(speech);

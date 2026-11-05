@@ -1,9 +1,9 @@
 //! Cleaning and classifying the microphone: WebRTC AEC3 echo cancellation (sonora), RNNoise
-//! suppression and the earshot speech detector.
+//! suppression, WebRTC AGC2 gain control (sonora) and the earshot speech detector.
 
 use nnnoiseless::DenoiseState;
 
-use sonora::config::{EchoCanceller as Aec3, HighPassFilter};
+use sonora::config::{AdaptiveDigital, EchoCanceller as Aec3, GainController2, HighPassFilter};
 use sonora::{AudioProcessing, Config, StreamConfig};
 
 use super::{FRAME, RATE};
@@ -46,6 +46,43 @@ impl EchoCanceller {
                 .process_render_f32(&[chunk], &mut [&mut self.scratch[..]]);
         }
         played.drain(..whole);
+        for chunk in frame.chunks_exact_mut(TEN_MS) {
+            self.scratch.copy_from_slice(chunk);
+            let _ = self
+                .apm
+                .process_capture_f32(&[&self.scratch[..]], &mut [chunk]);
+        }
+    }
+}
+
+/// Brings the voice to a steady level once the noise is gone: WebRTC AGC2 with its adaptive
+/// digital gain and limiter (sonora).
+pub struct GainControl {
+    apm: AudioProcessing,
+    scratch: Vec<f32>,
+}
+
+impl GainControl {
+    pub fn new() -> Self {
+        let config = Config {
+            gain_controller2: Some(GainController2 {
+                adaptive_digital: Some(AdaptiveDigital::default()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        let apm = AudioProcessing::builder()
+            .config(config)
+            .capture_config(StreamConfig::new(RATE, 1))
+            .build();
+        Self {
+            apm,
+            scratch: vec![0.0; TEN_MS],
+        }
+    }
+
+    /// Applies the gain to `frame` in place.
+    pub fn process(&mut self, frame: &mut [f32]) {
         for chunk in frame.chunks_exact_mut(TEN_MS) {
             self.scratch.copy_from_slice(chunk);
             let _ = self
@@ -156,6 +193,71 @@ mod tests {
         assert!(
             reduction_db > 10.0,
             "only {reduction_db:.1} dB of echo removed"
+        );
+    }
+
+    /// Voiced syllables at about `db`: a glottal buzz whose pitch glides, through the two formants
+    /// of a vowel that changes each syllable, under a rising and falling envelope.
+    fn voice(seconds: usize, db: f32) -> Vec<f32> {
+        const VOWELS: [(f32, f32); 4] = [
+            (730.0, 1090.0),
+            (270.0, 2290.0),
+            (530.0, 1840.0),
+            (300.0, 870.0),
+        ];
+        let syllable = RATE as usize / 5;
+        let (mut a, mut av, mut b, mut bv, mut phase) = (0.0f32, 0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        let raw: Vec<f32> = (0..RATE as usize * seconds)
+            .map(|i| {
+                let n = i / syllable;
+                let t = (i % syllable) as f32 / syllable as f32;
+                let pitch = 110.0 + 40.0 * (i as f32 / RATE as f32 * 1.3).sin() + 20.0 * t;
+                let last = phase;
+                phase = (phase + pitch / RATE as f32).fract();
+                let pulse = (phase < last) as u8 as f32;
+                let (f1, f2) = VOWELS[n % VOWELS.len()];
+                let (w1, w2) = (
+                    std::f32::consts::TAU * f1 / RATE as f32,
+                    std::f32::consts::TAU * f2 / RATE as f32,
+                );
+                av = av * 0.993 - w1 * a + pulse;
+                a += w1 * av;
+                bv = bv * 0.993 - w2 * b + pulse;
+                b += w2 * bv;
+                // Three syllables, then a breath.
+                let envelope = if n % 4 == 3 {
+                    0.0
+                } else {
+                    (t * std::f32::consts::PI).sin()
+                };
+                (a + 0.5 * b) * envelope
+            })
+            .collect();
+        let scale = 10f32.powf((db - rms_db(&raw)) / 20.0);
+        raw.iter().map(|s| s * scale).collect()
+    }
+
+    fn rms_db(x: &[f32]) -> f32 {
+        10.0 * (x.iter().map(|s| s * s).sum::<f32>() / x.len() as f32)
+            .max(1e-10)
+            .log10()
+    }
+
+    #[test]
+    fn gain_control_lifts_a_quiet_voice() {
+        let quiet = voice(6, -40.0);
+        let before = rms_db(&quiet[quiet.len() - RATE as usize..]);
+        let mut gain = GainControl::new();
+        let mut out = Vec::new();
+        for frame in quiet.chunks_exact(FRAME) {
+            let mut frame = frame.to_vec();
+            gain.process(&mut frame);
+            out.extend(frame);
+        }
+        let after = rms_db(&out[out.len() - RATE as usize..]);
+        assert!(
+            after - before > 10.0,
+            "{before:.1} dB in, {after:.1} dB out"
         );
     }
 

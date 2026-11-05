@@ -96,6 +96,13 @@ pub fn VoicePane(info: RwSignal<DeviceInfo, LocalStorage>) -> impl IntoView {
                         {..use_settings_item_attrs()}
                     )
                 }
+                SettingsItem(label = "Automatic gain", description = "Keeps your voice at a steady level.") {
+                    Switch(
+                        default_checked = settings.auto_gain,
+                        on_change = processing(state, |a, on| a.auto_gain.store(on, Ordering::Relaxed), |s, on| s.auto_gain = on),
+                        {..use_settings_item_attrs()}
+                    )
+                }
                 SettingsItem(label = "Speech detection", description = "Opens the microphone for voice alone.") {
                     Switch(
                         default_checked = settings.smart_vad,
